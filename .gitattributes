@@ -1,0 +1,42 @@
+# Line-ending policy for the whole repository.
+#
+# Upstream (OpenTyria) committed a mix of LF and CRLF files, and the working
+# tree here came from a clone with core.autocrlf=true. Being explicit makes
+# blobs deterministic: text is stored LF and checked out LF, so the same commit
+# produces the same bytes everywhere.
+#
+# This repo sets core.autocrlf=false locally to match. To compare against
+# upstream without CRLF noise, use:
+#     git diff --ignore-cr-at-eol upstream/master
+#
+# Do not change this without a reason.
+
+* text=auto eol=lf
+
+# Windows-only authoring formats keep CRLF.
+*.ps1    text eol=crlf
+*.psm1   text eol=crlf
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+*.sln    text eol=crlf
+*.vcxproj         text eol=crlf
+*.vcxproj.filters text eol=crlf
+*.vcxproj.user    text eol=crlf
+
+# Vendored third-party sources: stored verbatim, never rewritten.
+deps/**                      -text
+code/OpenTyria/sqlite3.c     -text
+code/OpenTyria/sqlite3.h     -text
+code/OpenTyria/stb_ds.h      -text
+code/OpenTyria/stb_sprintf.h -text
+
+# Binary assets and build artifacts.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.lib  binary
+*.dll  binary
+*.exe  binary
+*.pdb  binary
+Gw.dat binary
+*.db   binary

@@ -1,0 +1,50 @@
+# ---- build output ----
+build/
+out/
+bin/
+obj/
+
+# ---- compiler / linker artifacts ----
+*.cache
+*.exp
+*.idb
+*.ilk
+*.iobj
+*.ipdb
+*.lib
+*.obj
+*.obj.enc
+*.opendb
+*.pdb
+*.rdi
+*.tlog
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+
+# ---- runtime assets (never commit) ----
+# The client's asset archive -- large, proprietary, and not ours to ship.
+Gw.dat
+# The live database; created by seeding db/seed.sql
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+# Local config and per-deployment DH keys
+config.local.*
+keys.local.txt
+user/
+logs/
+*.log
+
+# ---- editors / tooling ----
+.vs/
+.vscode/
+__pycache__/
+*.pyc
+.idea/
+
+# ---- reference clone of upstream, not part of this project ----
+.ref-opentyria/

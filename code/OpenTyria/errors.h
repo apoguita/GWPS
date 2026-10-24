@@ -1,0 +1,16 @@
+#pragma once
+
+enum
+{
+    ERR_OK           = 0,
+    ERR_UNSUCCESSFUL = 1,
+    ERR_OUT_OF_MEMORY,
+
+    ERR_SERVER_ERROR,
+    ERR_WOULDBLOCK,
+    ERR_TIMEOUT,
+    ERR_BAD_USER_DATA,
+    ERR_NOT_ENOUGH_DATA,
+    ERR_BUFFER_TOO_SMALL,
+    ERR_PEER_DISCONNECTED,
+};
