@@ -39,9 +39,12 @@ That is milestone 0: **make Pre-Searing maps real.**
 - [x] Document architecture (`docs/01-architecture.md`)
 - [x] Document inherited scaling limits (`docs/02-scaling-limitations.md`)
 - [x] Replace the stale MSVC-only build with a portable CMake build
-- [x] Build/run scripts (`scripts/build.ps1`, `scripts/run.ps1`)
-- [x] Make config external: no hardcoded ports/secrets baked into `main.c`
-- [x] Repo hygiene: `.gitignore`, no secrets, no `Gw.dat`
+- [x] Build/run scripts (`scripts/build.ps1`, `scripts/run.ps1`, `scripts/seed-db.ps1`)
+- [x] Repo hygiene: `.gitignore`, `.gitattributes`, no `Gw.dat`/`*.db` committed
+- [x] Verified the result actually compiles and runs (MSVC 19.42, listens on
+      6112/6113/1337)
+- [ ] **Still open:** config external — ports, paths and DH keys are still
+      hardcoded in `main.c`. Tracked as milestone 2, item 1.
 
 ## Milestone 1 — Pre-Searing maps load
 
