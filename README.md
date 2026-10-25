@@ -22,6 +22,7 @@ actually playable, and make the server underneath it operable and survivable.
 
 | Document | What's in it |
 |----------|--------------|
+| [`INSTALL.md`](INSTALL.md) | **Install guide** — build, seed, run, patch the client, the network mode decision, verification, troubleshooting, and how to undo each part |
 | [`docs/01-architecture.md`](docs/01-architecture.md) | Every component of the stack, the connection lifecycle, the data model |
 | [`docs/02-scaling-limitations.md`](docs/02-scaling-limitations.md) | **The scaling audit** — 12 concrete limits, with source references and fixes |
 | [`docs/03-roadmap.md`](docs/03-roadmap.md) | Milestones 0–5, Pre-Searing map checklist, what's out of scope |
@@ -35,6 +36,10 @@ actually playable, and make the server underneath it operable and survivable.
 | [`docs/upstream/README.OpenTyria.md`](docs/upstream/README.OpenTyria.md) | Upstream's original README, preserved |
 
 ## Quick start (Windows)
+
+The complete step-by-step guide — including the open/closed network mode decision, verification,
+troubleshooting and how to undo each part — is **[`INSTALL.md`](INSTALL.md)**. The short version
+follows.
 
 ### Prerequisites
 
@@ -102,27 +107,17 @@ config-file work in milestone 2):
 ### Network mode (open by default)
 
 The client keeps up to three connections to **ArenaNet's file servers** while playing, for a
-file/version check. That is normal and expected. GWPS serves all gameplay on loopback and needs
-nothing from that exchange, so **the default is open** — nothing to configure, and a retail
-client on the same machine is unaffected. Full detail, including what each socket carries:
-[`docs/09-client-connections.md`](docs/09-client-connections.md).
+file/version check. GWPS serves all gameplay on loopback and needs nothing from that exchange, so
+**the default is open** — nothing to configure, and a retail client on the same machine is
+unaffected.
 
-If you want those connections closed as well (a machine dedicated to GWPS, or no traffic to
-ArenaNet at all), build the responder once and toggle it:
+If you want those closed instead (a machine dedicated to GWPS, or no traffic to ArenaNet at all),
+it is a switch: build `gwps_dns` and run `tools/dns-gwps.ps1 -Enable`. It is machine-wide, so
+disable it before playing retail.
 
-```powershell
-cmake --build build --config RelWithDebInfo --target gwps_dns
-.\tools\dns-gwps.ps1 -Enable     # elevated: runs gwps_dns on 127.0.0.1:53 and points the adapter at it
-.\tools\dns-gwps.ps1 -Status
-.\tools\dns-gwps.ps1 -Disable    # restores the adapter's original DNS and stops the responder
-```
-
-This mode is **machine-wide**: while it is on, a retail client on the same machine would also be
-redirected and fail to log in. Disable it before playing retail. The adapter's previous DNS
-servers are saved and restored by `-Disable`.
-
-`tools/hosts-gwps.ps1` also exists, but only redirects the lookups that honour the hosts file and
-therefore gives a partial result — it is kept for diagnosis, not for installs.
+[`INSTALL.md`](INSTALL.md) covers both modes step by step, along with verification, troubleshooting
+and how to undo each part. What each connection carries, and why patching the client cannot remove
+them: [`docs/09-client-connections.md`](docs/09-client-connections.md).
 
 ## Repository layout
 
