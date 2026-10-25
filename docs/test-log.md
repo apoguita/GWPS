@@ -452,3 +452,31 @@ extraction exists. The identification must come from **observing the open**:
 hook `OpenFileByFileId` (resolver `gw_dat_reader.open_file_anchor` already exists in
 Py4GW_Stealth), reload the map, and read `(map_id -> file_id, stream_id)` — the
 method `06-client-tooling.md` proposed in the first place.
+
+### Follow-up: containment matching also fails, which changes the diagnosis
+
+The client's full trapezoid list was then dumped (`--dump-trapezoids`, 6120 rows for
+map 148) and matched against every trapezoid our importer reads from all 426 blobs
+(`gwdat_pathing --trapezoids`, 1.37 M rows, 213 distinct maps):
+
+| Test | Result |
+|------|--------|
+| exact containment (blob set in client set) | **0 shared trapezoids, every blob** |
+| order-insensitive (bag of six coordinates per trapezoid) | 0 — rules out a field-order bug |
+| 48-unit tolerance, best candidates by bounding box | 0 of 6120 near-matches |
+
+So this is **not** "our importer reads a subset", which is what F11 guessed. Even as
+an unordered bag of numbers, the client's geometry has no counterpart in any RIFF map
+blob. `0x000265F1` comes closest by bounding box — `(-18432, -24576, 21504, 25080)`
+against the client's `(-18432, -24576, 21504, 24576)` — and still shares nothing.
+
+**F12 — map 148's geometry is not in any of the 426 RIFF map blobs.** Class:
+blocking for blob-based identification. The 213 maps in `Gw.dat` do not include
+Ascalon City (pre-Searing), so either its data lives in a container that is not
+`RIFF_MAP2`, or the id we need is not a map blob at all. Every "no config, falling
+back to Kamadan" map may be in this category, which would make the milestone-1 plan
+(map -> blob id) wrong in principle rather than merely unfinished.
+
+Next, and it does not depend on our parser: search **every decompressed file** in
+`Gw.dat` for the float32 bytes of a distinctive client trapezoid. That names the file
+id regardless of container type.

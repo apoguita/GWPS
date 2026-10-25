@@ -52,6 +52,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--py4gw-root", default=os.environ.get("PY4GW_STEALTH", DEFAULT_PY4GW_ROOT))
     parser.add_argument("--csv", default=DEFAULT_CSV, help="fingerprint sheet from gwdat_pathing")
     parser.add_argument("--json", default=None, help="also write the report as JSON here")
+    parser.add_argument("--dump-trapezoids", default=None, metavar="PATH",
+                        help="write every trapezoid as CSV (for containment matching)")
     parser.add_argument("--pid", type=int, default=None)
     args = parser.parse_args(argv)
 
@@ -104,7 +106,17 @@ def main(argv: list[str]) -> int:
         trapezoids = 0
         min_x = min_y = float("inf")
         max_x = max_y = float("-inf")
-        for plane in pathing_maps:
+
+        dump_handle = None
+        if args.dump_trapezoids:
+            dump_path = Path(args.dump_trapezoids)
+            dump_path.parent.mkdir(parents=True, exist_ok=True)
+            dump_handle = dump_path.open("w", encoding="utf-8", newline="\n")
+            # Same column order as gwdat_pathing's --trapezoids, so the two dumps
+            # are directly comparable.
+            dump_handle.write("plane,trap_id,xtl,xtr,yt,xbl,xbr,yb\n")
+
+        for plane_index, plane in enumerate(pathing_maps):
             # A plane is a `PathingMap` snapshot, not a list: the trapezoids live
             # under `.trapezoids` (py4gw/context/map_context.py).
             for trap in getattr(plane, "trapezoids", ()):
@@ -121,6 +133,15 @@ def main(argv: list[str]) -> int:
                     if max_y < y:
                         max_y = y
                 trapezoids += 1
+                if dump_handle is not None:
+                    dump_handle.write(
+                        f"{plane_index},{int(getattr(trap, 'id', -1))},"
+                        f"{float(trap.XTL):.2f},{float(trap.XTR):.2f},{float(trap.YT):.2f},"
+                        f"{float(trap.XBL):.2f},{float(trap.XBR):.2f},{float(trap.YB):.2f}\n")
+
+        if dump_handle is not None:
+            dump_handle.close()
+            print(f"  trapezoids dumped -> {args.dump_trapezoids}")
 
         fingerprint = {
             "planes": planes,

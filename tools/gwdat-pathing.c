@@ -1,19 +1,19 @@
-// gwdat-pathing -- fingerprint every map blob in Gw.dat by its navmesh.
+﻿// gwdat-pathing -- fingerprint every map blob in Gw.dat by its navmesh.
 //
 // Why: `GmMapConfig` needs a `map_file_id` per map, and nothing in the client
 // volunteers it (`AreaInfo.file_id` reads 0 for every Pre-Searing map, verified
-// twice — see docs/06-client-tooling.md, finding F5). But the stage-2 `Path` chunk
+// twice â€” see docs/06-client-tooling.md, finding F5). But the stage-2 `Path` chunk
 // of a map blob *is* the navmesh, and the client holds the same navmesh in memory
 // for the map it is standing in. A fingerprint computed from the same blob on both
 // sides therefore identifies the blob without hooking anything.
 //
-// The fingerprint is (plane count, trapezoid count, bounding box) — three numbers
+// The fingerprint is (plane count, trapezoid count, bounding box) â€” three numbers
 // that must agree exactly when both sides parsed the same file:
 //
 //   file_id,size,planes,trapezoids,min_x,min_y,max_x,max_y
 //
 // This reuses the server's own importer (`GmImportMap`), so it exercises exactly
-// the path `GameSrv_LoadMap` uses — the same property `gwdat-scan` was built for.
+// the path `GameSrv_LoadMap` uses â€” the same property `gwdat-scan` was built for.
 //
 // Build: CMake target `gwdat_pathing`.
 //
@@ -58,7 +58,7 @@ static void fingerprint_map(GmMapContext *context, PathingFingerprint *out)
 }
 
 static bool fingerprint_file(FileArchive *archive, uint32_t file_id, size_t *out_size,
-                             PathingFingerprint *out)
+                             PathingFingerprint *out, bool dump_trapezoids, FILE *out_fp)
 {
     array_uint8_t content = {0};
     if (FaGetFile(archive, file_id, &content) != 0) {
@@ -82,6 +82,23 @@ static bool fingerprint_file(FileArchive *archive, uint32_t file_id, size_t *out
             fingerprint_map(&context, out);
             *out_size = content.len;
             ok = true;
+
+            // Full trapezoid dump, for comparing against what the client holds.
+            // Our importer reads a subset (finding F11), so the useful question is
+            // "is this blob's parse contained in the client's set", not equality.
+            if (dump_trapezoids && out_fp != NULL) {
+                PathStaticData *static_data = &context.path.static_data;
+                for (size_t p = 0; p < static_data->planes.len; ++p) {
+                    PathPlane *plane = &static_data->planes.ptr[p];
+                    for (size_t t = 0; t < plane->trapezoids.len; ++t) {
+                        const PathTrapezoid *trap = &plane->trapezoids.ptr[t];
+                        fprintf(out_fp, "0x%08X,%zu,%u,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+                                file_id, p, trap->trap_id,
+                                trap->xtl, trap->xtr, trap->yt,
+                                trap->xbl, trap->xbr, trap->yb);
+                    }
+                }
+            }
         }
         GmMapContext_Free(&context);
     }
@@ -109,11 +126,20 @@ int main(int argc, char **argv)
     bool do_dump = false;
     size_t min_size = 4096;
     size_t max_size = 8u * 1024u * 1024u;
+    FILE *trap_out = NULL;
 
     for (int idx = 2; idx < argc; ++idx) {
         if (strcmp(argv[idx], "--dump") == 0 && idx + 1 < argc) {
             dump_id = (uint32_t) strtoul(argv[++idx], NULL, 0);
             do_dump = true;
+        } else if (strcmp(argv[idx], "--trapezoids") == 0 && idx + 1 < argc) {
+            // Per-trapezoid rows for containment matching against the client.
+            trap_out = fopen(argv[++idx], "w");
+            if (trap_out == NULL) {
+                fprintf(stderr, "cannot write '%s'\n", argv[idx]);
+                return 1;
+            }
+            fprintf(trap_out, "file_id,plane,trap_id,xtl,xtr,yt,xbl,xbr,yb\n");
         } else if (strcmp(argv[idx], "--min-size") == 0 && idx + 1 < argc) {
             min_size = (size_t) strtoul(argv[++idx], NULL, 0);
         } else if (strcmp(argv[idx], "--max-size") == 0 && idx + 1 < argc) {
@@ -130,7 +156,7 @@ int main(int argc, char **argv)
     if (do_dump) {
         PathingFingerprint fp = {0};
         size_t size = 0;
-        if (fingerprint_file(&archive, dump_id, &size, &fp)) {
+        if (fingerprint_file(&archive, dump_id, &size, &fp, trap_out != NULL, trap_out)) {
             print_row(dump_id, size, &fp);
         } else {
             fprintf(stderr, "0x%08X: not a parseable map\n", dump_id);
@@ -164,7 +190,7 @@ int main(int argc, char **argv)
 
         PathingFingerprint fp = {0};
         size_t size = 0;
-        if (fingerprint_file(&archive, file_id, &size, &fp)) {
+        if (fingerprint_file(&archive, file_id, &size, &fp, trap_out != NULL, trap_out)) {
             print_row(file_id, size, &fp);
             ++maps;
         }
@@ -175,3 +201,4 @@ int main(int argc, char **argv)
     FaClose(&archive);
     return 0;
 }
+
