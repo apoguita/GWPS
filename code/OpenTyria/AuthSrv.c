@@ -1020,6 +1020,8 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
 
 void AuthSrv_CompleteGameTransfer(AuthSrv *srv, AuthTransfer transfer, uint32_t server_id, uint16_t map_id)
 {
+    log_info("Completing transfer: type %d, server %u, map %d", (int) transfer.type,
+             server_id, (int) map_id);
     if (transfer.type == AuthTransferType_None) {
         log_warn("Unexpected transfer type 'AuthTransferType_None'");
     } else if (transfer.type == AuthTransferType_Auth) {

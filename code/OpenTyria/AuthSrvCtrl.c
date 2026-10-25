@@ -113,8 +113,12 @@ int AuthSrvCtrl_HandleServerReady(AuthSrv *srv, CtrlConnection *conn, CtrlMsg_Se
     metadata->ctrl_conn = conn->token;
     metadata->ready = true;
 
+    log_info("Server %u is ready (ctrl %04" PRIXPTR "); %zu pending transfer(s):",
+             conn->server_id, conn->token, metadata->pending_transfers.len);
+
     for (size_t idx = 0; idx < metadata->pending_transfers.len; ++idx) {
         AuthTransfer transfer = metadata->pending_transfers.ptr[idx];
+        log_info("  flushing transfer #%zu (type %d)", idx, (int) transfer.type);
         AuthSrv_CompleteGameTransfer(
             srv,
             transfer,
