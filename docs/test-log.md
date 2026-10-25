@@ -480,3 +480,43 @@ back to Kamadan" map may be in this category, which would make the milestone-1 p
 Next, and it does not depend on our parser: search **every decompressed file** in
 `Gw.dat` for the float32 bytes of a distinctive client trapezoid. That names the file
 id regardless of container type.
+
+### CORRECTION — F12 was my scan window, not the archive; map 148 is found
+
+The float search above is what settled it. `gwdat_pathing --find-floats` takes float
+pairs straight out of the client dump — `(yt,yb)`, `(xtl,xtr)`, `(xbl,xbr)` — and
+scans all 146 901 decompressed ids for them. Result: **exactly two files match 25 of
+48 patterns**, `0x0001B97D` and `0x0005E9E4` (2 925 267 bytes each — the two stored
+copies of one map). Loading either through `GmImportMap` reproduces the client's
+fingerprint **exactly**: 58 planes, 6120 trapezoids, bounds
+`(-18432, -24576) .. (21504, 24576)`.
+
+So F12 is withdrawn as stated: the geometry *is* in the archive, and our importer
+parses it *correctly*. The containment test failed because the fingerprint sheet was
+built with a `--min-size 4096` filter on the **compressed** MFT entry size — and a map
+can compress below that floor. `0x0001B97D` (2.9 MB decompressed) never entered the
+sheet, so the matcher had nothing to match. **The bug was in my tooling, not in
+`Gw.dat` or in `GmImportMap`.** Same class as the earlier `--min-size 400000` mistake
+in this session: filtering on compressed size to select maps is wrong by construction.
+
+F11 is also withdrawn for this map: 58 planes / 6120 trapezoids is the client's own
+count, so the importer read the whole navmesh. Whether it under-reads *other* maps is
+untested and unproven.
+
+### Map 148 is configured
+
+```c
+GmMapConfig s_AscalonCityPreSearing = {
+    .map_id      = MapId_AscalonCityPreSearing,   // 148
+    .map_file_id = 0x1B97D,
+    .n_spawnpoints = 1,
+    .spawnpoints = { { 9541.873f, 4796.456f, 0 } },
+};
+```
+
+Spawn point = where the live client stood (`Player.GetXY()`). The plane is
+**unverified** (assumed 0); the 0x3D stream corrects it on the first report.
+
+`db/database.db` now has the existing character's `last_outpost = 148`, and
+`gwps_server.exe` rebuilds and binds 6112/6113/1337. **Not yet exercised:** a client
+logging into our server and standing in Ascalon City (pre). That is the next test.

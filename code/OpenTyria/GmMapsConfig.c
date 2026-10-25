@@ -9,6 +9,27 @@ GmMapConfig s_KamadanJewelOfIstanOutpost = {
     },
 };
 
+// Ascalon City (pre-Searing), map id 148 -- the first Pre-Searing map.
+//
+// `map_file_id` came from `tools/gwdat-pathing.c --find-floats`, 2026-10-24: the
+// client standing in the map was asked for its trapezoids (58 planes, 6120
+// trapezoids, bounds -18432,-24576 .. 21504,24576), and those exact numbers were
+// found in two archive entries -- 0x1B97D and 0x5E9E4, the two stored copies of one
+// map. Loading either through `GmImportMap` reproduces the client's fingerprint
+// exactly, which is the check that this id is the right one.
+//
+// The spawn point is where the live client stood at the time (9541.873, 4796.456),
+// read from `Player.GetXY()`. The plane is *unverified* -- the probe did not read it,
+// so 0 is assumed; the 0x3D position stream corrects it on the first report.
+GmMapConfig s_AscalonCityPreSearing = {
+    .map_id = MapId_AscalonCityPreSearing,
+    .map_file_id = 0x1B97D,
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 9541.873f, 4796.456f, 0 },
+    },
+};
+
 GmMapConfig s_KainengCenterOutpost = {
     .map_id = MapId_KainengCenterOutpost,
     .map_file_id = 0x265F7,
@@ -39,6 +60,8 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
     switch (map_id) {
     case MapId_KamadanJewelOfIstanOutpost:
         return &s_KamadanJewelOfIstanOutpost;
+    case MapId_AscalonCityPreSearing:
+        return &s_AscalonCityPreSearing;
     case MapId_KainengCenterOutpost:
         return &s_KainengCenterOutpost;
     case MapId_LionsArchOutpost:
