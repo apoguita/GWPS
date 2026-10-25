@@ -162,6 +162,8 @@ if(WIN32)
     if(MSVC)
         target_compile_options(portal PRIVATE /W3 /wd4996)
     endif()
+    # The resolver hook redirects getaddrinfo, so it needs the socket library and its headers.
+    target_link_libraries(portal PRIVATE Ws2_32)
 endif()
 
 # ---------------------------------------------------------------------------

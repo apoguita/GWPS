@@ -4,12 +4,164 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <stdarg.h>
+#include <string.h>
+#include <ctype.h>
 
+// winsock2.h must precede windows.h, otherwise Windows.h pulls in the old winsock.h and the
+// socket types are defined twice.
+#include <WinSock2.h>
+#include <WS2tcpip.h>
 #include <Windows.h>
 
 #define UUID_NODE_LEN   6
 
 #define DllExport __declspec(dllexport)
+
+// ---------------------------------------------------------------------------
+// Redirect the client's own resolution of ArenaNet hostnames to loopback.
+//
+// WHY THIS EXISTS
+// The client reaches several file servers over raw TCP 6112 and builds those hostnames itself
+// (P:\Code\Net\FileCli\FcSrv.cpp), resolving them through DNS. That is why every other
+// approach failed, all measured rather than guessed:
+//   - rewriting the hostname strings in the exe changed no connection at all;
+//   - a hosts entry caught one file check but not the ones resolved through DNS;
+//   - the domain suffix cannot be redirected (the names stop resolving) and Windows does not
+//     resolve invented names such as File1.localhost.
+//
+// This DLL is loaded into the client process -- proof: the portal user id it returns is the
+// hardcoded UUID that appears in the auth flow -- so it can answer the lookup at the source.
+// No hosts file, no DNS service, nothing machine-wide, and a retail client is unaffected.
+//
+// The hook delegates to the real getaddrinfo with "127.0.0.1" instead of hand-building the
+// result, so what the client later frees is the structure the runtime allocated.
+
+#define HOOK_LOG_ENV "GWPS_PORTAL_HOOK_LOG"
+
+typedef int (WSAAPI * getaddrinfo_fn)(PCSTR, PCSTR, const ADDRINFOA *, PADDRINFOA *);
+
+static getaddrinfo_fn s_real_getaddrinfo;
+
+static void HookLog(const char *fmt, ...)
+{
+    char path[MAX_PATH + 32];
+    const char *env = getenv(HOOK_LOG_ENV);
+    if (env != NULL && env[0] != '\0') {
+        snprintf(path, sizeof(path), "%s", env);
+    } else {
+        char tmp[MAX_PATH];
+        DWORD n = GetTempPathA(sizeof(tmp), tmp);
+        if (n == 0 || n >= sizeof(tmp)) return;
+        snprintf(path, sizeof(path), "%sgwps-portal-hook.log", tmp);
+    }
+
+    FILE *f = fopen(path, "a");
+    if (f == NULL) return;
+
+    va_list args;
+    va_start(args, fmt);
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    fprintf(f, "%02u:%02u:%02u.%03u ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    vfprintf(f, fmt, args);
+    fputc('\n', f);
+    va_end(args);
+    fclose(f);
+}
+
+//: Does this hostname belong to ArenaNet's infrastructure?
+static bool HostIsRedirected(const char *node)
+{
+    static const char *suffixes[] = {
+        "arenanetworks.com",
+        "ncplatform.net",
+    };
+
+    if (node == NULL || node[0] == '\0') return false;
+
+    size_t len = strlen(node);
+    for (size_t s = 0; s < sizeof(suffixes) / sizeof(suffixes[0]); ++s) {
+        size_t slen = strlen(suffixes[s]);
+        if (len < slen) continue;
+
+        bool match = true;
+        for (size_t i = 0; i < slen; ++i) {
+            if (tolower((unsigned char) node[len - slen + i]) != suffixes[s][i]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+
+    return false;
+}
+
+static int WSAAPI Hook_getaddrinfo(PCSTR node, PCSTR service, const ADDRINFOA *hints, PADDRINFOA *res)
+{
+    if (HostIsRedirected(node)) {
+        HookLog("getaddrinfo(\"%s\") -> 127.0.0.1", node);
+        // The real function, pointed at loopback: it allocates, so freeaddrinfo stays correct.
+        return s_real_getaddrinfo("127.0.0.1", service, hints, res);
+    }
+    return s_real_getaddrinfo(node, service, hints, res);
+}
+
+static void PatchImportSlot(uintptr_t *slot, void *replacement)
+{
+    DWORD old = 0;
+    if (VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &old)) {
+        *slot = (uintptr_t) replacement;
+        VirtualProtect(slot, sizeof(*slot), old, &old);
+    }
+}
+
+//: Hook getaddrinfo in the main module's import table, and report what else resolves names.
+static void InstallResolverHook(void)
+{
+    HMODULE base = GetModuleHandleA(NULL);
+    if (base == NULL) return;
+
+    IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *) base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *) ((BYTE *) base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return;
+
+    IMAGE_DATA_DIRECTORY dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (dir.VirtualAddress == 0 || dir.Size == 0) return;
+
+    unsigned hooked = 0;
+    IMAGE_IMPORT_DESCRIPTOR *imp = (IMAGE_IMPORT_DESCRIPTOR *) ((BYTE *) base + dir.VirtualAddress);
+    for (; imp->Name != 0; ++imp) {
+        const char *dll = (const char *) ((BYTE *) base + imp->Name);
+        IMAGE_THUNK_DATA *orig = (IMAGE_THUNK_DATA *) ((BYTE *) base +
+            (imp->OriginalFirstThunk != 0 ? imp->OriginalFirstThunk : imp->FirstThunk));
+        IMAGE_THUNK_DATA *iat = (IMAGE_THUNK_DATA *) ((BYTE *) base + imp->FirstThunk);
+
+        for (size_t i = 0; orig[i].u1.AddressOfData != 0; ++i) {
+            if (IMAGE_SNAP_BY_ORDINAL(orig[i].u1.Ordinal)) continue;
+            IMAGE_IMPORT_BY_NAME *name = (IMAGE_IMPORT_BY_NAME *) ((BYTE *) base + orig[i].u1.AddressOfData);
+            const char *fname = (const char *) name->Name;
+
+            // Report every name-related import once: if the client uses a resolver other than
+            // getaddrinfo (GetAddrInfoW, DnsQuery_A/W), this log says so instead of leaving us
+            // to wonder why the hook never fired.
+            if (strstr(fname, "addr") != NULL || strstr(fname, "Addr") != NULL ||
+                strstr(fname, "DnsQuery") != NULL || strstr(fname, "gethostbyname") != NULL) {
+                HookLog("import %s!%s", dll, fname);
+            }
+
+            if (strcmp(fname, "getaddrinfo") == 0) {
+                s_real_getaddrinfo = (getaddrinfo_fn) (uintptr_t) iat[i].u1.Function;
+                PatchImportSlot((uintptr_t *) &iat[i].u1.Function, (void *) Hook_getaddrinfo);
+                ++hooked;
+            }
+        }
+    }
+
+    HookLog("resolver hook installed: %u getaddrinfo slot(s) patched", hooked);
+}
 
 struct uuid {
     uint32_t time_low;
@@ -162,5 +314,13 @@ DllExport uint8_t* PortalGetUserId(void)
 
 BOOL WINAPI DllMain(HINSTANCE hModule, DWORD dwReason, LPVOID lpReserved)
 {
+    if (dwReason == DLL_PROCESS_ATTACH) {
+        // The client's file client dials during startup, so the hook has to be in place as soon
+        // as this DLL is loaded. The import table is already resolved by then: the loader fixes
+        // it up before any DllMain runs, so patching the slots here takes effect for every
+        // later call.
+        DisableThreadLibraryCalls(hModule);
+        InstallResolverHook();
+    }
     return TRUE;
 }
