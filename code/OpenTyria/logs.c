@@ -72,6 +72,38 @@ void log_vmsg(unsigned int level, const char *format, va_list ap)
     }
 
     fflush(stderr);
+
+    // Mirror to a file. Debugging a transfer or a chat message needs the log *after* the
+    // fact, and a console the operator has to copy by hand is not a log: the first travel
+    // test cost two round trips because the evidence scrolled past in a terminal.
+    // `GWPS_LOG` overrides the path; set it empty to disable the file.
+    const char *log_path = getenv("GWPS_LOG");
+    if (log_path == NULL) {
+        log_path = "server.log";
+    }
+    if (log_path[0] != '\0') {
+        static FILE *log_file = NULL;
+        static bool log_file_failed = false;
+        if (log_file == NULL && !log_file_failed) {
+            log_file = fopen(log_path, "a");
+            if (log_file == NULL) {
+                log_file_failed = true;
+            }
+        }
+        if (log_file != NULL) {
+            fprintf(
+                log_file,
+                "[%04d-%02d-%02dT%02d:%02d:%02d.%03d] %5s: %s%s\n",
+                time.year, time.month, time.day,
+                time.hour, time.minute, time.second,
+                time.millisecond,
+                log_print_level_s(level),
+                buffer,
+                trimmed
+            );
+            fflush(log_file);
+        }
+    }
 }
 
 void log_info(const char *fmt, ...)

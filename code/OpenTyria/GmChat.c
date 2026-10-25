@@ -178,6 +178,7 @@ void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char 
     uint16_t buffer[CHUNK];
 
     size_t total = strlen(ascii);
+    log_info("Sending %zu chars of system chat to player %u: '%s'", total, player_id, ascii);
     for (size_t offset = 0; offset < total; offset += CHUNK) {
         size_t len = min_size_t(total - offset, CHUNK);
         for (size_t idx = 0; idx < len; ++idx) {
