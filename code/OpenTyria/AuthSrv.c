@@ -983,8 +983,22 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     }
 
 
+    // EXPERIMENT (2026-10-25): every transfer observed to HANG targeted a server that
+    // already existed, while every transfer to a freshly created server completed
+    // (3/3 vs 0/1, and earlier failures match). The client, in the hung case, never even
+    // opened a new TCP connection after receiving a correctly serialized redirect.
+    // GWPS_TELEPORT_FRESH=1 skips reuse so the hypothesis can be tested directly
+    // instead of reasoned about. It leaks a server per hop (see docs/08-gm-commands.md),
+    // which is why it is opt-in rather than the default.
+    const char *fresh_env = getenv("GWPS_TELEPORT_FRESH");
+    bool force_fresh = (fresh_env != NULL && strcmp(fresh_env, "1") == 0);
+
     size_t idx;
-    if (AuthSrvCtrl_FindCompatibleGameSrv(srv, msg->district, &idx) != 0) {
+    if (force_fresh || AuthSrvCtrl_FindCompatibleGameSrv(srv, msg->district, &idx) != 0) {
+        if (force_fresh) {
+            log_info("GWPS_TELEPORT_FRESH=1: creating a new server for map %d instead of "
+                     "reusing one", (int) msg->district.map_id);
+        }
         if (AuthSrvCtrl_CreateServer(srv, msg->district, &idx) != 0) {
             log_error("Couldn't allocate an appropriate game server");
             AuthSrvCtrl_SendCancelPlayerTransfer(conn);
