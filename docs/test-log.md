@@ -666,3 +666,33 @@ All eleven spawn points were captured with their plane (0 in every case). Config
 `GmMapsConfig.c` for all of them, including the three outposts that were not in the
 original eight-map list; only Ascalon City and Lakeside County have been loaded on the
 GWPS server so far.
+
+## 2026-10-25 -- which ArenaNet endpoints the client actually needs
+
+Tested one hostname at a time on Gw.custom.exe, each build regenerated from the untouched
+Gw.exe (	ools/patch-gw.py --detach-only <prefix>), logging in after each:
+
+| host                        | repointed | verdict  |
+|-----------------------------|-----------|----------|
+| Diag.ArenaNetworks.com      | yes       | safe     |
+| icmp.arenanetworks.com      | yes       | safe     |
+| bug.arenanetworks.com:6112  | yes       | safe     |
+| account.arena.net           | yes       | safe     |
+| Auth1.ArenaNetworks.com     | yes       | safe     |
+| File1.ArenaNetworks.com     | no        | REQUIRED |
+| ArenaNetworks.com (suffix)  | no        | REQUIRED |
+
+Findings:
+
+- Repointing all seven broke login with "Guild Wars is unable to connect to the ArenaNet
+  network"; restoring File1 alone did not fix it. The suffix was the other blocker: the
+  client appears to build a hostname from it at runtime, so patching the full strings does
+  not necessarily remove the connection.
+- The socket a working client holds is 54.196.189.234, which is inside
+  File1.ArenaNetworks.com's A record set: the content/file server, not the auth server.
+  -authsrv 127.0.0.1 genuinely redirects the auth handshake.
+- So the client cannot be fully detached by hostname patching. It streams Gw.dat content
+  from File1, and real detachment means serving those files ourselves -- GameSrv_SendManifest
+  exists but is never called with data, and the manifest we send reports "done" behind
+  nothing.
+- Current client build keeps File1 and the suffix, redirects the other five.
