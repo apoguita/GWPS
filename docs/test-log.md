@@ -404,3 +404,51 @@ The tool read the client "build" from the executable's version resource, which r
 
 Class: bug (tooling). Action: fixed — the capture header now records
 `sha256` + `file_version` + `size`, and the hash is what identifies a build.
+
+---
+
+## Probe — navmesh fingerprint to find map 148's blob — **NO MATCH** — 2026-10-24
+
+Goal: identify `GmMapConfig.map_file_id` for Ascalon City (pre-Searing), map 148, by
+matching the client's live navmesh against the 213 map blobs in `Gw.dat`.
+
+Tools built for it: `tools/gwdat-pathing.c` (CMake target `gwdat_pathing`) parses
+each blob with the server's own `GmImportMap` and prints
+`file_id,size,planes,trapezoids,min_x,min_y,max_x,max_y`; `tools/probe-pathing.py`
+reads the same fingerprint from the live client via `Map.Pathing.GetPathingMaps()`.
+
+### What worked
+
+- **The client is confirmed in map 148** — `Map.GetMapID()` = 148,
+  `Map.GetMapName` = "Ascalon City (pre-Searing)", pid 33540.
+- **A spawn point, which is requirement #2:** the player stands at
+  **(9541.873, 4796.456)**. That is a coordinate the map is known to accept.
+- **The fingerprints are perfectly discriminating.** All 426 RIFF map blobs
+  fingerprint (213 maps x 2 copies), and they collapse to exactly **213 distinct
+  fingerprints, all pairs, zero collisions**. A match would have been unambiguous.
+
+### What failed, and why it is informative
+
+The client's fingerprint for map 148 — **58 planes, 6120 trapezoids, bounds
+(-18432, -24576) .. (21504, 24576)** — matches **none** of the 213 blobs.
+
+The reason is not the sheet: it is that **our importer extracts far fewer
+trapezoids than the client holds.** Kamadan (`0x345CC`), the one map that is known
+to work end to end, parses to **39 planes / 1270 trapezoids** in our own code path,
+while the client's numbers for a comparable outpost are in the thousands. So
+`PathImport_ReadPlanes` reads a subset — enough for the server's own movement to
+function, not the same set the client builds. The fingerprint was comparing a
+subset against a superset.
+
+Finding **F11 — the pathing importer reads a subset of the navmesh.** Class: bug
+(upstream data import). Action: schedule — it does not block Phase 0 (movement works
+against the subset), but it does block fingerprint-based blob identification, and it
+is a real risk for pathing fidelity in Pre-Searing maps with more vertical structure.
+
+### Consequence
+
+Route A (fingerprint matching) is closed until F11 is fixed or a comparable
+extraction exists. The identification must come from **observing the open**:
+hook `OpenFileByFileId` (resolver `gw_dat_reader.open_file_anchor` already exists in
+Py4GW_Stealth), reload the map, and read `(map_id -> file_id, stream_id)` — the
+method `06-client-tooling.md` proposed in the first place.

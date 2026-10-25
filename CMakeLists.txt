@@ -108,6 +108,26 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# Host tool: fingerprint each map blob's navmesh inside Gw.dat
+# (tools/gwdat-pathing.c). Same single-translation-unit trick as gwdat_scan.
+# ---------------------------------------------------------------------------
+add_executable(gwdat_pathing "${GWPS_ROOT}/tools/gwdat-pathing.c")
+target_include_directories(gwdat_pathing PRIVATE
+    "${OT_SRC_DIR}"
+    "${GWPS_ROOT}/deps/mbedtls-3.6.0/include")
+target_link_libraries(gwdat_pathing PRIVATE gwps_sqlite mbedtls)
+if(WIN32)
+    target_link_libraries(gwdat_pathing PRIVATE Ws2_32 bcrypt ntdll)
+else()
+    target_link_libraries(gwdat_pathing PRIVATE pthread m)
+endif()
+if(MSVC)
+    target_compile_options(gwdat_pathing PRIVATE /W0)
+else()
+    target_compile_options(gwdat_pathing PRIVATE -w)
+endif()
+
+# ---------------------------------------------------------------------------
 # Host tool: enumerate the map blobs inside Gw.dat (tools/gwdat-scan.c).
 # Compiles the whole library with COMPILE_TOOLS so build_open_tyria.c skips
 # main.c and the tool supplies its own.
