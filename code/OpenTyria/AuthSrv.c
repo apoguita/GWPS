@@ -1628,6 +1628,24 @@ void AuthSrv_ProcessCtrlConnectionEvent(AuthSrv *srv, CtrlConnection *conn, Even
             );
         }
     }
+
+    // Free and clear, exactly as the auth-connection loop above does. This was missing, so
+    // the queue grew for the life of the connection AND every ctrl event re-dispatched every
+    // message it had ever received, oldest first.
+    //
+    // That is not a leak, it is the wrong-map bug: a StartPlayerTransfer from minutes ago is
+    // re-run on top of the one just asked for. Observed 2026-10-25 -- a request for Ashford
+    // (164) was answered by the Barradin server (163), and a request for Barradin (163) by
+    // the Foibles server (165) -- because the auth replayed an older queued request first
+    // and the client went where that stale redirect pointed. It also produced the duplicate
+    // 'Received CompletePlayerTransfer' warnings and the repeated 'already in flight' lines,
+    // and it could hand the client two redirects in a row, which is the hang.
+    for (size_t idx = 0; idx < conn->messages.len; ++idx) {
+        CtrlMsg *msg = conn->messages.ptr[idx];
+        free(msg);
+    }
+
+    array_clear(&conn->messages);
 }
 
 void AuthSrv_ProcessEvent(AuthSrv *srv, Event event)
