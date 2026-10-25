@@ -29,6 +29,8 @@ GameSrvMsg* GameSrv_BuildChatMessageServerMsg(GameSrv *srv, Channel channel, siz
 void GameSrv_SendChatMessageServer(GameSrv *srv, GameConnection *conn, Channel channel);
 void GameSrv_BroadcastChatMessageServer(GameSrv *srv, Channel channel);
 void GameSrv_SendInvalidCommand(GameSrv *srv, uint16_t player_id);
+// One plain-ASCII line to a player's chat window; for GM command feedback.
+void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char *ascii);
 int GameSrv_HandleChatCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg);
 int GameSrv_HandleLocalMessage(GameSrv *srv, uint16_t player_id, Channel channel, slice_uint16_t msg);
 int GameSrv_HandleChatMessage(GameSrv *srv, uint16_t player_id, GameSrv_ChatMessage *msg);

@@ -901,6 +901,17 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     uint32_t player_token = random_uint32(&srv->random);
 
     GameSrvMetadata *metadata = &srv->games[idx];
+
+    // The registry is what the client's *next* connection is validated against: when it
+    // reconnects, `AuthSrv` compares the handshake's map_token and player_token with
+    // these two fields and drops the connection when they disagree ("User connected to
+    // game server with unexpected values"). A transfer that does not update them starts
+    // the load and then kicks the client -- which is exactly the 007 disconnect reported
+    // on 2026-10-25.
+    connected->char_id = msg->char_id;
+    connected->current_server_id = metadata->server_id;
+    connected->current_player_id = player_token;
+
     if (metadata->ctrl_conn == 0) {
         AuthTransfer *transfer = array_push(&metadata->pending_transfers, 1);
         transfer->type = AuthTransferType_Game;

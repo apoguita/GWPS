@@ -146,6 +146,35 @@ void GameSrv_SendInvalidCommand(GameSrv *srv, uint16_t player_id)
 // dispatcher is declared here so chat can consult it first.
 static bool GameSrv_TryHandleGmCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg);
 
+// Send a plain ASCII line to one player's chat window. Used by the GM commands, whose
+// feedback is otherwise invisible: the client shows nothing for a log line, and a
+// command that answers only in the server log is a command the tester cannot use
+// interactively.
+void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char *ascii)
+{
+    GmPlayer *player;
+    if ((player = GameSrv_GetPlayer(srv, player_id)) == NULL) {
+        return;
+    }
+
+    GameConnection *conn;
+    if ((conn = GameSrv_GetConnection(srv, player->conn_token)) == NULL) {
+        return;
+    }
+
+    uint16_t buffer[200];
+    size_t len = strlen(ascii);
+    if (ARRAY_SIZE(buffer) <= len) {
+        len = ARRAY_SIZE(buffer) - 1;
+    }
+    for (size_t idx = 0; idx < len; ++idx) {
+        buffer[idx] = (uint16_t) (uint8_t) ascii[idx];
+    }
+
+    slice_uint16_t text = { .ptr = buffer, .len = len };
+    GameSrv_SendChatMessageCore(srv, conn, text);
+}
+
 int GameSrv_HandleChatCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg)
 {
     // GM commands first: /tp, /teleport, /maps. They are ours, and they must not fall

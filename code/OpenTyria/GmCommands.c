@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // GM chat commands -- the testing shortcuts.
 //
@@ -89,17 +89,43 @@ static int GmCommand_ToAscii(slice_uint16_t text, char *buffer, size_t capacity)
     return 0;
 }
 
-static void GmCommand_ListTargets(void)
+static void GmCommand_ListTargets(GameSrv *srv, uint16_t player_id)
 {
-    log_info("Teleport targets (%zu, every one with a map config):",
+    // Chat first: a command whose answer is only in the server log is a command the
+    // tester cannot use from inside the game. The log still gets the full table.
+    char line[180];
+    size_t used = 0;
+    used += (size_t) snprintf(line + used, sizeof(line) - used, "Maps:");
+
+    const char *previous = NULL;
+    for (size_t idx = 0; idx < ARRAY_SIZE(s_teleport_targets); ++idx) {
+        const GmTeleportTarget *target = &s_teleport_targets[idx];
+        // One entry per map, not per alias: the first alias is the one to type.
+        if (previous != NULL && strcmp(previous, target->label) == 0) {
+            continue;
+        }
+        previous = target->label;
+
+        size_t needed = strlen(target->alias) + 3;
+        if (sizeof(line) <= used + needed) {
+            GameSrv_SendSystemChatMessage(srv, player_id, line);
+            used = (size_t) snprintf(line, sizeof(line), "      ");
+        }
+        used += (size_t) snprintf(line + used, sizeof(line) - used, " %s,", target->alias);
+    }
+    if (0 < used) {
+        GameSrv_SendSystemChatMessage(srv, player_id, line);
+    }
+    GameSrv_SendSystemChatMessage(srv, player_id,
+                                 "Use: /tp <name>, e.g. /tp lakeside county");
+
+    log_info("Teleport targets (%zu aliases, every one with a map config):",
              ARRAY_SIZE(s_teleport_targets));
     for (size_t idx = 0; idx < ARRAY_SIZE(s_teleport_targets); ++idx) {
         const GmTeleportTarget *target = &s_teleport_targets[idx];
         log_info("  /tp %-15s -> map %3d  %s", target->alias, (int) target->map_id,
                  target->label);
     }
-    log_info("The table lives in code/OpenTyria/GmCommands.c; this list goes to the "
-             "server log, not to chat.");
 }
 
 // `/tp <alias>` -- move the player to another map by asking the auth server for a game
@@ -125,6 +151,7 @@ static int GameSrv_HandleTeleportCommand(GameSrv *srv, uint16_t player_id, slice
     if (target == NULL) {
         log_warn("Player id %u asked to teleport to '%s', which is not in the table "
                  "(try /maps)", player_id, alias);
+        GameSrv_SendSystemChatMessage(srv, player_id, "Unknown map name. Type /maps.");
         GameSrv_SendInvalidCommand(srv, player_id);
         return ERR_OK;
     }
@@ -134,6 +161,9 @@ static int GameSrv_HandleTeleportCommand(GameSrv *srv, uint16_t player_id, slice
     if (GetMapConfigForMapId(target->map_id) == NULL) {
         log_error("/tp %s refused: map %d has no GmMapConfig, so the server would fall "
                   "back to Kamadan", alias, (int) target->map_id);
+        GameSrv_SendSystemChatMessage(srv, player_id,
+                                      "That map has no config; the server would fall back "
+                                      "to Kamadan, so the teleport is refused.");
         GameSrv_SendInvalidCommand(srv, player_id);
         return ERR_OK;
     }
@@ -147,6 +177,7 @@ static int GameSrv_HandleTeleportCommand(GameSrv *srv, uint16_t player_id, slice
     if ((int) srv->district.map_id == (int) target->map_id) {
         log_info("Player id %u is already in '%s' (map %d)", player_id, target->label,
                  (int) target->map_id);
+        GameSrv_SendSystemChatMessage(srv, player_id, "You are already here.");
         return ERR_OK;
     }
 
@@ -158,6 +189,7 @@ static int GameSrv_HandleTeleportCommand(GameSrv *srv, uint16_t player_id, slice
     log_info("Player id %u teleporting: map %d -> map %d '%s'",
              player_id, (int) srv->district.map_id, (int) target->map_id, target->label);
 
+    GameSrv_SendSystemChatMessage(srv, player_id, "Teleporting, please wait...");
     GameSrvCtrl_StartPlayerTransferTo(srv, player, district);
     return ERR_OK;
 }
@@ -196,9 +228,10 @@ static bool GameSrv_TryHandleGmCommand(GameSrv *srv, uint16_t player_id, slice_u
     }
 
     if (strcmp(command, "maps") == 0) {
-        GmCommand_ListTargets();
+        GmCommand_ListTargets(srv, player_id);
         return true;
     }
 
     return false;
 }
+
