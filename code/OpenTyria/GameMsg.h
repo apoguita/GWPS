@@ -593,24 +593,34 @@ typedef struct GameSrv_AddPlayerToPlayerParty {
 } GameSrv_AddPlayerToPlayerParty;
 
 #define CHAT_MESSAGE_FRAGMENT_MAX_LENGTH 122
+
+// The chat family below was corrected on 2026-10-25 against the client's own
+// definitions in Py4GW_Reforged_Native/include/GW/common/stoc.h:257-297. Every one of
+// them had a narrower id/channel field than the client reads, so the client consumed a
+// truncated message: /maps rendered nothing and once crashed the client outright.
 typedef struct GameSrv_ChatMessageCore {
     uint16_t header;
-    uint32_t msg_len;
+    // TYPE_STRING_16 is a 16-bit length prefix. The client's MessageCore is
+    // `wchar_t message[122]` with prefixType="int16"; a uint32 here shifted every
+    // character by two bytes.
+    uint16_t msg_len;
     uint16_t msg_buf[CHAT_MESSAGE_FRAGMENT_MAX_LENGTH];
 } GameSrv_ChatMessageCore;
 
 typedef struct GameSrv_ChatMessageLocal {
     uint16_t header;
-    uint16_t player_id_of_sender;
-    uint8_t  channel;
+    // MessageLocal: uint32 player_number, uint32 channel.
+    uint32_t player_id_of_sender;
+    uint32_t channel;
 } GameSrv_ChatMessageLocal;
 
 typedef struct GameSrv_ChatMessageGlobal {
     uint16_t header;
-    uint8_t  channel;
-    uint32_t sender_len;
+    // MessageGlobal: uint32 channel, then two int16-prefixed strings.
+    uint32_t channel;
+    uint16_t sender_len;
     uint16_t sender_buf[32];
-    uint32_t tag_len;
+    uint16_t tag_len;
     uint16_t tag_buf[6];
 } GameSrv_ChatMessageGlobal;
 
@@ -625,8 +635,9 @@ typedef struct GameSrv_ChatMessageWhisper {
 
 typedef struct GameSrv_ChatMessageServer {
     uint16_t header;
-    uint16_t some_id;
-    uint8_t  channel;
+    // MessageServer: uint32 id, uint32 channel.
+    uint32_t some_id;
+    uint32_t channel;
 } GameSrv_ChatMessageServer;
 
 typedef struct GameSrv_TransferGameServerInfo {

@@ -2386,30 +2386,36 @@ MsgField GAME_SMSG_0093[2] = {
     {TYPE_STRING_16, 122},
 };
 
+// Chat layouts, corrected 2026-10-25 against the client's own definitions in
+// Py4GW_Reforged_Native/include/GW/common/stoc.h:257-297. `id`/`player_number` and
+// `channel` are uint32 there, not the WORD/BYTE this table had, so the client was
+// reading past every message the server sent -- which is why /maps rendered nothing and
+// once crashed the client. MessageCore's `wchar_t message[122]` carries an int16 length
+// prefix, which TYPE_STRING_16 already models.
 MsgField GAME_SMSG_0094[3] = {
     {TYPE_MSG_HEADER, 94},
-    {TYPE_WORD, 0},
-    {TYPE_BYTE, 0},
+    {TYPE_DWORD, 0},
+    {TYPE_DWORD, 0},
 };
 
 MsgField GAME_SMSG_0095[4] = {
     {TYPE_MSG_HEADER, 95},
     {TYPE_AGENT_ID, 0},
-    {TYPE_BYTE, 0},
+    {TYPE_DWORD, 0},
     {TYPE_STRING_16, 8},
 };
 
 MsgField GAME_SMSG_0096[4] = {
     {TYPE_MSG_HEADER, 96},
-    {TYPE_BYTE, 0},
+    {TYPE_DWORD, 0},
     {TYPE_STRING_16, 32},
     {TYPE_STRING_16, 6},
 };
 
 MsgField GAME_SMSG_0097[3] = {
     {TYPE_MSG_HEADER, 97},
-    {TYPE_WORD, 0},
-    {TYPE_BYTE, 0},
+    {TYPE_DWORD, 0},
+    {TYPE_DWORD, 0},
 };
 
 MsgField GAME_SMSG_0098[3] = {
@@ -5476,10 +5482,10 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {91,  2,  GAME_SMSG_0091, 6},
     {92,  4,  GAME_SMSG_0092, 14},
     {93,  2,  GAME_SMSG_0093, 250},
-    {94,  3,  GAME_SMSG_0094, 5},
-    {95,  4,  GAME_SMSG_0095, 27},
-    {96,  4,  GAME_SMSG_0096, 87},
-    {97,  3,  GAME_SMSG_0097, 5},
+    {94,  3,  GAME_SMSG_0094, 10},
+    {95,  4,  GAME_SMSG_0095, 28},
+    {96,  4,  GAME_SMSG_0096, 86},
+    {97,  3,  GAME_SMSG_0097, 10},
     {98,  3,  GAME_SMSG_0098, 10},
     {99,  3,  GAME_SMSG_0099, 10},
     {100, 4,  GAME_SMSG_0100, 8},
@@ -5871,3 +5877,4 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {486, 2,  GAME_SMSG_0486, 3},
     {487, 2,  GAME_SMSG_0487, 3},
 };
+
