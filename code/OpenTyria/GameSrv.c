@@ -1345,20 +1345,15 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
 
     GameSrvMsg *buffer = GameSrv_BuildMsg(srv, GAME_SMSG_TRANSFER_GAME_SERVER_INFO);
     GameSrv_TransferGameServerInfo *msg2 = &buffer->transfer_game_server_info;
-
-    // The order is the client's, not ours, and it matters: map_id goes before
-    // is_explorable and player_token. With them the other way round the client read our
-    // map id as its player token and reported "player token ... vs 148".
     msg2->map_token = msg->map_token;
     msg2->region = msg->region;
     msg2->map_id = msg->map_id;
-    // The client reads this as a uint32 flag. Derive it from the destination district:
-    // srv->district is where the player is leaving, and it gets this wrong on every hop
-    // between an outpost and an explorable area.
-    GmDistrict dest = srv->transfer_district;
-    msg2->is_explorable = (dest.map_type == MapType_MainExplorable ||
-                           dest.map_type == MapType_MissionExplorable ||
-                           dest.map_type == MapType_ArenaExplorable) ? 1 : 0;
+    // The client reads this as a uint32 flag. GameSrv_Update hardcodes 1 for the same
+    // field with a "what to put here?" comment; derive it from the district instead of
+    // guessing, because it decides how the client treats the instance it is joining.
+    msg2->is_explorable = (srv->district.map_type == MapType_MainExplorable ||
+                           srv->district.map_type == MapType_MissionExplorable ||
+                           srv->district.map_type == MapType_ArenaExplorable) ? 1 : 0;
     msg2->player_token = msg->player_token;
 
     switch (msg->address.af)
@@ -1407,7 +1402,6 @@ void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistric
     srv->transfer_conn_token = player->conn_token;
     srv->transfer_player_id = player->player_id;
     srv->transfer_char_id = player->char_id;
-    srv->transfer_district = district;
     srv->transfer_pending = true;
 
     log_info("Asked the auth server for a game server on map %d (district %u); redirect "

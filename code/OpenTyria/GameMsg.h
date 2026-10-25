@@ -652,34 +652,16 @@ typedef struct GameSrv_ChatMessageServer {
 // unusable, which is why a teleport that "worked" left the client on a loading screen.
 // Matches a live server's message exactly (captured 2026-10-25, 52 bytes on the wire):
 //   a6 01 00 00 | host[24] | token1 | region | map_id | is_explorable | token2 | 0
-// 52 bytes, the size of every live transition captured (8/8):
-//   a6 01 | 00 00 | host[24] | map_token | region | map_id | is_explorable | player_token | 0
-// host is a sockaddr_in: family, big-endian port, address.
-//
-// The leading four bytes are not a 4-byte header: they are a normal 2-byte header plus a
-// zero WORD, the same shape MAP_UPDATE_CURRENT has (99 00 | 00 00 | ...). That misreading
-// is what led to widening every game message header at once, which broke login; the zero
-// was a field the whole time.
-//
-// Two real defects lived here, and between them they made travel look like luck:
-//   - The message was 46 bytes, not 52. The client knows each message's length from its
-//     own table and does not read one off the wire, so it stopped mid-packet waiting for
-//     6 bytes that never arrived and hung on the loading screen. Any message sent right
-//     after it "worked" only because the client swallowed that message's first 6 bytes as
-//     the tail of this one.
-//   - map_id and player_token were swapped. The client said so explicitly:
-//     "unexpected values: char ok (server same, player token 2795880831 vs 148)", where
-//     148 was the map id we had put in that slot.
+// The header is 4 bytes on the wire and 2 here (TYPE_MSG_HEADER_GAME), and host is a
+// sockaddr_in: family, big-endian port, address.
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
-    uint16_t unk;          // zero in every capture
     uint8_t  host[24];
     uint32_t map_token;
     uint32_t region;
-    uint32_t map_id;
-    uint32_t is_explorable;
     uint32_t player_token;
-    uint32_t unk2;         // zero in every capture
+    uint32_t is_explorable;
+    uint32_t map_id;
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {

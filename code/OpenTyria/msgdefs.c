@@ -4663,16 +4663,14 @@ MsgField GAME_SMSG_0421[14] = {
     {TYPE_BLOB, 8},
 };
 
-MsgField GAME_SMSG_0422[9] = {
+MsgField GAME_SMSG_0422[7] = {
     {TYPE_MSG_HEADER, 422},
-    {TYPE_WORD, 0},    // zero in every capture: the "4-byte header" was this field
-    {TYPE_BLOB, 24},   // host, a sockaddr_in
+    {TYPE_BLOB, 24},
     {TYPE_DWORD, 0},   // map_token
     {TYPE_DWORD, 0},   // region
-    {TYPE_DWORD, 0},   // map_id
-    {TYPE_DWORD, 0},   // is_explorable
     {TYPE_DWORD, 0},   // player_token
-    {TYPE_DWORD, 0},   // unknown, zero in every capture
+    {TYPE_DWORD, 0},   // is_explorable
+    {TYPE_DWORD, 0},   // map_id
 };
 
 MsgField GAME_SMSG_0423[10] = {
@@ -5812,7 +5810,7 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {419, 7,  GAME_SMSG_0419, 20},
     {420, 4,  GAME_SMSG_0420, 499},
     {421, 14, GAME_SMSG_0421, 83},
-    {422, 9,  GAME_SMSG_0422, 52},
+    {422, 7,  GAME_SMSG_0422, 46},
     {423, 10, GAME_SMSG_0423, 514},
     {424, 2,  GAME_SMSG_0424, 3},
     {425, 3,  GAME_SMSG_0425, 7},
