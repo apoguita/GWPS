@@ -150,6 +150,25 @@ array_uint16_t* GameSrv_GetTextBuilder(GameSrv *srv)
     return &srv->text_builder;
 }
 
+//: Trace every outgoing game message, header and size and first bytes.
+//:
+//: Set GWPS_TRACE=1 in the environment. Off by default because it is one line per message.
+//: It exists because a client that dies during a load looks identical whether we sent it
+//: one malformed message, a message of the wrong size, or the right messages in the wrong
+//: order -- and the only way to tell those apart is to look at what actually went out.
+static bool g_trace_messages_checked;
+static bool g_trace_messages;
+
+static bool GameSrv_TraceMessages(void)
+{
+    if (!g_trace_messages_checked) {
+        const char *env = getenv("GWPS_TRACE");
+        g_trace_messages = (env != NULL && env[0] != '\0' && env[0] != '0');
+        g_trace_messages_checked = true;
+    }
+    return g_trace_messages;
+}
+
 int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t size)
 {
     int err;
@@ -159,6 +178,17 @@ int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t siz
 
     assert(msg->header == format.header);
     assert(size == format.unpack_size);
+
+    // The client does not read a length off the wire: it looks up how many bytes the header
+    // carries and waits for exactly that many. So a struct that disagrees with its format
+    // table entry does not fail here, it desynchronises the client's stream -- and assert()
+    // is compiled out in the configuration we ship. Say so plainly when it happens.
+    if (size != format.unpack_size || msg->header != format.header) {
+        log_error("Message %u is %zu bytes in the struct but %zu in the format table "
+                  "(format header %u): the client reads the table's size, so this "
+                  "desynchronises its stream",
+                  msg->header, size, format.unpack_size, format.header);
+    }
 
     size_t size_before = array_size(&conn->outgoing);
 
@@ -172,6 +202,17 @@ int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t siz
         log_error("Failed to serialized message %u", msg->header);
         array_shrink(&conn->outgoing, size_before);
         return err;
+    }
+
+    if (GameSrv_TraceMessages()) {
+        char hex[3 * 24 + 1];
+        size_t n_show = written < 24 ? written : 24;
+        for (size_t idx = 0; idx < n_show; ++idx) {
+            snprintf(&hex[idx * 3], 4, "%02X ", dst[idx]);
+        }
+        hex[n_show * 3] = '\0';
+        log_info("SEND %4u 0x%04X %3zu bytes -> conn %04" PRIXPTR " : %s",
+                 msg->header, msg->header, written, conn->token, hex);
     }
 
     array_shrink(&conn->outgoing, size_before + written);
@@ -1306,12 +1347,16 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     msg2->map_token = msg->map_token;
     msg2->region = msg->region;
     msg2->map_id = msg->map_id;
-    // The client reads this as a uint32 flag. GameSrv_Update hardcodes 1 for the same
-    // field with a "what to put here?" comment; derive it from the district instead of
-    // guessing, because it decides how the client treats the instance it is joining.
-    msg2->is_explorable = (srv->district.map_type == MapType_MainExplorable ||
-                           srv->district.map_type == MapType_MissionExplorable ||
-                           srv->district.map_type == MapType_ArenaExplorable) ? 1 : 0;
+    // The client reads this as a uint32 flag deciding what kind of instance it is joining.
+    // It has to describe the DESTINATION: srv->district is the map being left, so a hop
+    // from Lakeside (explorable) into Ascalon City (outpost) used to send 1 and promise an
+    // explorable area. Real servers send 1 for explorable maps and 0 for outposts -- see
+    // the captured 0x01A6 for maps 161 (1) and 165 (0) -- so take it from the district
+    // recorded when the transfer started.
+    GmDistrict dest = srv->transfer_district;
+    msg2->is_explorable = (dest.map_type == MapType_MainExplorable ||
+                           dest.map_type == MapType_MissionExplorable ||
+                           dest.map_type == MapType_ArenaExplorable) ? 1 : 0;
     msg2->player_token = msg->player_token;
 
     switch (msg->address.af)
@@ -1359,6 +1404,7 @@ void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistric
     srv->transfer_conn_token = player->conn_token;
     srv->transfer_player_id = player->player_id;
     srv->transfer_char_id = player->char_id;
+    srv->transfer_district = district;
     srv->transfer_pending = true;
 
     log_info("Asked the auth server for a game server on map %d (district %u); redirect "

@@ -58,6 +58,10 @@ typedef struct GameSrv {
     uintptr_t                transfer_conn_token;
     uint32_t                 transfer_player_id;
     GmUuid                   transfer_char_id;
+    // The destination, recorded for the same reason as the connection: the completion
+    // handler has to fill in the client's is_explorable flag, and srv->district describes
+    // where the player is leaving, which is the wrong map on any outpost/explorable hop.
+    GmDistrict               transfer_district;
     bool                     transfer_pending;
     GmMapConfig             *map_static_config;
     Iocp                     iocp;
