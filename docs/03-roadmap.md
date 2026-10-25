@@ -48,6 +48,11 @@ That is milestone 0: **make Pre-Searing maps real.**
 
 ## Milestone 1 — Pre-Searing maps load
 
+> **Sequencing note:** the current working scope is **Phase 0 (verify the
+> inherited stack)** — see `04-scope.md`. Milestone 1 does not start until Phase 0
+> exit criteria are met. Phase 0 deliberately uses Kamadan, the only map with a
+> working config.
+
 Blocked on one unknown: **the `map_file_id` for each map**, which is the hash used
 inside `Gw.dat`. Procedure per map:
 

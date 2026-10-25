@@ -23,6 +23,8 @@ actually playable, and make the server underneath it operable and survivable.
 | [`docs/01-architecture.md`](docs/01-architecture.md) | Every component of the stack, the connection lifecycle, the data model |
 | [`docs/02-scaling-limitations.md`](docs/02-scaling-limitations.md) | **The scaling audit** — 12 concrete limits, with source references and fixes |
 | [`docs/03-roadmap.md`](docs/03-roadmap.md) | Milestones 0–5, Pre-Searing map checklist, what's out of scope |
+| [`docs/04-scope.md`](docs/04-scope.md) | **Current scope** — Phase 0 verification test plan, what works vs what doesn't |
+| [`docs/05-reverse-engineering.md`](docs/05-reverse-engineering.md) | Which tool for which job (Ghidra is for `Gw.exe`, not `Gw.dat`) |
 | [`docs/adr/`](docs/adr/) | Why we forked, why CMake, and later decisions |
 | [`docs/upstream/README.OpenTyria.md`](docs/upstream/README.OpenTyria.md) | Upstream's original README, preserved |
 
@@ -107,10 +109,15 @@ vc/                 Upstream MSVC projects -- kept for reference, NOT supported
 
 ## Status
 
+**Current phase: Phase 0 — verify the inherited stack**
+(full test plan in [`docs/04-scope.md`](docs/04-scope.md)).
+
 - [x] Forked, documented, buildable from a clean checkout (`scripts/build.ps1`)
 - [x] Scaling limits audited (`docs/02-scaling-limitations.md`)
+- [x] `portal.dll` builds (`cmake --build build --target portal`)
+- [ ] Phase 0 tests T0–T15 (`docs/test-log.md`)
 - [ ] Pre-Searing map configs (currently **every** map without a config silently
-      falls back to Kamadan, a Nightfall outpost — see `docs/03-roadmap.md`)
+      falls back to Kamadan, a Nightfall outpost)
 - [ ] Config file (ports, paths, DH keys out of `main.c`)
 - [ ] Graceful shutdown, WAL, async logging
 

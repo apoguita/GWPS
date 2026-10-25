@@ -108,6 +108,22 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# portal.dll -- injected into the Guild Wars client to stand in for the real
+# ArenaNet portal. Self-contained Windows DLL; required before any client test
+# can run (see docs/04-scope.md, prerequisite P4).
+# ---------------------------------------------------------------------------
+if(WIN32)
+    add_library(portal SHARED portal/portal.c)
+    set_target_properties(portal PROPERTIES
+        OUTPUT_NAME "portal"
+        PREFIX "")
+    # portal.c defines _CRT_SECURE_NO_WARNINGS itself.
+    if(MSVC)
+        target_compile_options(portal PRIVATE /W3 /wd4996)
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # Convenience: run from the source tree so relative paths ("db/database.db",
 # "Gw.dat") resolve the way upstream expects.
 # ---------------------------------------------------------------------------
