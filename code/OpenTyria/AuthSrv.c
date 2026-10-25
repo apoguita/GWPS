@@ -907,6 +907,41 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
         return ERR_OK;
     }
 
+    // A transfer request can arrive twice for one move (observed 2026-10-25: once with
+    // the target server still starting, once after it was up). Minting a fresh player
+    // token each time is what broke it -- the client was handed the first token, the
+    // registry kept the second, and the reconnect failed validation with error 007.
+    // If a transfer to this same map is already in flight, reuse its identity.
+    if (connected->transferring && connected->current_server_id != 0) {
+        GameSrvMetadata *in_flight = AuthSrvCtrl_GetGameSrvMetadata(srv, connected->current_server_id);
+        if (in_flight != NULL && in_flight->district.map_id == msg->district.map_id) {
+            log_info("Transfer already in flight to map %d (server %u, token %u); reusing it "
+                     "instead of minting a second identity",
+                     (int) msg->district.map_id, in_flight->server_id,
+                     connected->current_player_id);
+
+            if (in_flight->ctrl_conn == 0) {
+                AuthTransfer *transfer = array_push(&in_flight->pending_transfers, 1);
+                transfer->type = AuthTransferType_Game;
+                transfer->game.ctrl_conn_token = conn->token;
+                transfer->game.player_id = msg->player_id;
+                transfer->game.player_token = connected->current_player_id;
+                transfer->game.char_id = msg->char_id;
+                return ERR_OK;
+            }
+
+            AuthSrvCtrl_SendCompletePlayerTransfer(
+                conn,
+                msg->player_id,
+                msg->char_id,
+                SocketAddr_LocalHostV4(),
+                in_flight->server_id,
+                connected->current_player_id,
+                in_flight->district.map_id);
+            return ERR_OK;
+        }
+    }
+
     size_t idx;
     if (AuthSrvCtrl_FindCompatibleGameSrv(srv, msg->district, &idx) != 0) {
         if (AuthSrvCtrl_CreateServer(srv, msg->district, &idx) != 0) {
