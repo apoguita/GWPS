@@ -1337,21 +1337,6 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
              "connection %04" PRIXPTR " (err %d)", (int) msg->map_id, msg->map_token,
              msg->player_token, conn->token, send_err);
 
-    // A real transition sends MAP_UPDATE_CURRENT naming the DESTINATION immediately after
-    // the transfer message, on the same connection (captured 2026-10-25, two zones:
-    // 1a6 … then 99000000 <new map id> 00000000 in the same millisecond). We never
-    // sent it here, so a client being redirected was never told where it was going.
-    {
-        GameSrvMsg *map_buffer = GameSrv_BuildMsg(srv, GAME_SMSG_MAP_UPDATE_CURRENT);
-        GameSrv_UpdateCurrentMap *map_msg = &map_buffer->update_current_map;
-        map_msg->map_id = msg->map_id;
-        map_msg->unk = 0;
-        int map_err = GameConnection_SendMessage(conn, map_buffer, sizeof(*map_msg));
-        log_info("Sent MAP_UPDATE_CURRENT: map %d -> connection %04" PRIXPTR " (err %d)",
-                 (int) msg->map_id, conn->token, map_err);
-    }
-}
-
 void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistrict district)
 {
     int err;
