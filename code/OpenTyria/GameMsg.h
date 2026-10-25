@@ -657,12 +657,11 @@ typedef struct GameSrv_ChatMessageServer {
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
     uint8_t  host[24];
-    uint32_t map_token;      // token1: the world/server id
+    uint32_t map_token;
     uint32_t region;
-    uint32_t map_id;
+    uint32_t player_token;
     uint32_t is_explorable;
-    uint32_t player_token;   // token2
-    uint32_t unk;            // present in every captured instance, always 0
+    uint32_t map_id;
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {
