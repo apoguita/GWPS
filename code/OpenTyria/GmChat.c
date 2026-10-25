@@ -67,7 +67,14 @@ void GameSrv_BroadcastChatMessageCore(GameSrv *srv, slice_uint16_t data)
         frag.len = min_size_t(data.len - offset, CHAT_MESSAGE_FRAGMENT_MAX_LENGTH);
 
         size_t size;
-        GameSrvMsg *buffer = GameSrv_BuildChatMessageCoreMsg(srv, data, &size);
+        // The fragment, not the whole slice -- the same bug that was fixed in
+        // GameSrv_SendChatMessageCore: passing `data` made every fragment carry the full
+        // text, and pushed anything longer than one fragment past the builder's limit.
+        GameSrvMsg *buffer = GameSrv_BuildChatMessageCoreMsg(srv, frag, &size);
+        if (buffer == NULL) {
+            log_error("Refusing to broadcast a chat fragment the builder rejected");
+            return;
+        }
         GameSrv_BroadcastMessage(srv, buffer, size);
     }
 }
@@ -119,8 +126,32 @@ void GameSrv_BroadcastChatMessageServer(GameSrv *srv, Channel channel)
     GameSrv_BroadcastMessage(srv, buffer, size);
 }
 
+//: Whether chat may be put on the wire at all.
+//:
+//: OFF by default. Sending chat crashed the client twice: our layouts were corrected
+//: against the client's stoc.h, but a live capture showed stoc.h disagrees with the wire for
+//: at least one payload-free packet (PING_REQUEST is 4 bytes where the struct implies 8), so
+//: the header width is still unsettled and every message we send is a guess. `GWPS_CHAT=1`
+//: turns sending back on for experimenting; until then GM answers go to the log only.
+//:
+//: Every chat send path must consult this, including the "invalid command" reply: an unknown
+//: map name in /tp was enough to crash the client while that one skipped the check.
+static bool GameSrv_ChatSendingEnabled(void)
+{
+    const char *enable = getenv("GWPS_CHAT");
+    return enable != NULL && strcmp(enable, "1") == 0;
+}
+
 void GameSrv_SendInvalidCommand(GameSrv *srv, uint16_t player_id)
 {
+    // Gated like every other chat send. This used to broadcast unconditionally, so any
+    // unknown command -- a mistyped /tp name above all -- put a chat message on the wire
+    // that the client cannot parse, and it crashed.
+    if (!GameSrv_ChatSendingEnabled()) {
+        log_info("GM answer (chat disabled, set GWPS_CHAT=1 to send): Unknown command");
+        return;
+    }
+
     GmPlayer *player;
     if ((player = GameSrv_GetPlayer(srv, player_id)) == NULL) {
         log_error("Failed to get player struct");
@@ -173,15 +204,9 @@ void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char 
         return;
     }
 
-    // OFF BY DEFAULT since 2026-10-25: sending this crashed the client twice. Our chat
-    // layouts were corrected against the client's stoc.h, but a live capture showed that
-    // stoc.h itself disagrees with the wire for at least one payload-free packet
-    // (PING_REQUEST is 4 bytes on the wire where the struct implies 8), so the header
-    // width is still unsettled and every message we send is a guess. Until a capture of
-    // a real server's chat settles it, GM answers go to the log only.
-    // `GWPS_CHAT=1` turns sending back on for experimenting.
-    const char *enable = getenv("GWPS_CHAT");
-    if (enable == NULL || strcmp(enable, "1") != 0) {
+    // OFF BY DEFAULT, see GameSrv_ChatSendingEnabled: `GWPS_CHAT=1` turns sending back on
+    // for experimenting.
+    if (!GameSrv_ChatSendingEnabled()) {
         log_info("GM answer (chat disabled, set GWPS_CHAT=1 to send): %s", ascii);
         return;
     }
