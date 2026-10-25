@@ -907,64 +907,48 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
         return ERR_OK;
     }
 
-    // Only the server the player is actually on may move them. A burst observed on
-    // 2026-10-25 had one /tp produce four handler calls alternating between two running
-    // servers, each minting a fresh identity -- the client ended up on a token nobody
-    // held and froze on the loading screen. A stale request from any other server is
-    // refused here, which also makes the alternation impossible.
-    if (connected->current_server_id != 0 && conn->server_id != 0 &&
-        conn->server_id != connected->current_server_id) {
-        // Not necessarily a stale request -- usually the opposite. A transfer that never
-        // completed leaves the registry pointing at the server the client never reached,
-        // while the client keeps playing on the old one. Refusing here then blocks every
-        // future teleport forever (observed 2026-10-25: registry said 1247356963, the
-        // player was on 3898186703 and every /tp after that was 'ignored as stale').
-        // The requester is the server actually hosting the player, so trust it and resync.
-        uint64_t since_transfer_ms = sys_get_monotonic_time_ms() - connected->last_transfer_ms;
-        if (since_transfer_ms < 5000) {
-            log_info("Ignoring a transfer request from server %u: a transfer was accepted "
-                     "%llu ms ago and the registry points at server %u, which is that "
-                     "transfer's target", conn->server_id,
-                     (unsigned long long) since_transfer_ms, connected->current_server_id);
-            return ERR_OK;
-        }
-        log_warn("Resyncing the account to server %u (registry said %u): the last transfer "
-                 "never completed, so the registry was stale",
-                 conn->server_id, connected->current_server_id);
-        connected->current_server_id = conn->server_id;
-        connected->transferring = false;
-    }
+    // ---------------------------------------------------------------------------
+    // Decide on state, never on elapsed time.
+    //
+    // These messages are asynchronous: the client's disconnect, the auth server's
+    // completion, the old server's duplicate request and the new server's readiness
+    // arrive in whatever order the machine produces. A clock cannot tell which ordering
+    // happened -- an earlier time-window attempt was wrong for exactly that reason --
+    // so the two identities are kept apart instead and EITHER is valid at the handshake:
+    //
+    //   current_server_id / current_player_id   where the client's connection was last
+    //                                           validated (a fact)
+    //   pending_server_id / pending_player_id   where an in-flight transfer wants it to go
+    //                                           (an intention)
+    //
+    // Whichever arrives first, nothing has to be guessed and no message has to be
+    // discarded because of when it came.
+    // ---------------------------------------------------------------------------
 
-    // While a transfer is in flight to one map, a request for a different map is refused
-    // rather than allowed to overwrite the identity the client is about to reconnect with.
-    if (connected->transferring && connected->current_server_id != 0) {
-        GameSrvMetadata *in_flight = AuthSrvCtrl_GetGameSrvMetadata(srv, connected->current_server_id);
-        if (in_flight != NULL && in_flight->district.map_id != msg->district.map_id) {
-            log_warn("Ignoring a transfer to map %d while a transfer to map %d is still in "
-                     "flight for this account", (int) msg->district.map_id,
-                     (int) in_flight->district.map_id);
-            return ERR_OK;
-        }
-    }
-    // A transfer request can arrive twice for one move (observed 2026-10-25: once with
-    // the target server still starting, once after it was up). Minting a fresh player
-    // token each time is what broke it -- the client was handed the first token, the
-    // registry kept the second, and the reconnect failed validation with error 007.
-    // If a transfer to this same map is already in flight, reuse its identity.
-    if (connected->transferring && connected->current_server_id != 0) {
-        GameSrvMetadata *in_flight = AuthSrvCtrl_GetGameSrvMetadata(srv, connected->current_server_id);
-        if (in_flight != NULL && in_flight->district.map_id == msg->district.map_id) {
-            log_info("Transfer already in flight to map %d (server %u, token %u); reusing it "
-                     "instead of minting a second identity",
-                     (int) msg->district.map_id, in_flight->server_id,
-                     connected->current_player_id);
+    if (connected->transferring) {
+        if (connected->pending_server_id != 0 && conn->server_id != 0 &&
+            conn->server_id == connected->current_server_id) {
+            // The server the client is leaving, asking again for the move already in
+            // flight. That is the tail of this transfer, not a new one: answer with the
+            // pending identity rather than minting a second one the client never sees.
+            GameSrvMetadata *in_flight =
+                AuthSrvCtrl_GetGameSrvMetadata(srv, connected->pending_server_id);
+            if (in_flight == NULL) {
+                log_error("Transfer in flight to server %u, but its metadata is gone",
+                          connected->pending_server_id);
+                return ERR_OK;
+            }
+
+            log_info("Transfer to map %d is already in flight (server %u, token %u); reusing "
+                     "that identity", (int) in_flight->district.map_id,
+                     connected->pending_server_id, connected->pending_player_id);
 
             if (in_flight->ctrl_conn == 0) {
                 AuthTransfer *transfer = array_push(&in_flight->pending_transfers, 1);
                 transfer->type = AuthTransferType_Game;
                 transfer->game.ctrl_conn_token = conn->token;
                 transfer->game.player_id = msg->player_id;
-                transfer->game.player_token = connected->current_player_id;
+                transfer->game.player_token = connected->pending_player_id;
                 transfer->game.char_id = msg->char_id;
                 return ERR_OK;
             }
@@ -974,12 +958,30 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
                 msg->player_id,
                 msg->char_id,
                 SocketAddr_LocalHostV4(),
-                in_flight->server_id,
-                connected->current_player_id,
+                connected->pending_server_id,
+                connected->pending_player_id,
                 in_flight->district.map_id);
             return ERR_OK;
         }
+
+        log_warn("Refusing a transfer request from server %u while a transfer from server "
+                 "%u to server %u is in flight", conn->server_id,
+                 connected->current_server_id, connected->pending_server_id);
+        return ERR_OK;
     }
+
+    // Nothing in flight. If the requester is not where we believe the client is, that
+    // belief is stale -- a previous transfer never completed -- and the requester is the
+    // server actually holding the player: it has them and is asking to move them.
+    if (connected->current_server_id != 0 && conn->server_id != 0 &&
+        conn->server_id != connected->current_server_id) {
+        log_warn("Resyncing the account to server %u (registry said %u): no transfer is in "
+                 "flight, so the registry was stale", conn->server_id,
+                 connected->current_server_id);
+        connected->current_server_id = conn->server_id;
+        connected->current_player_id = 0;
+    }
+
 
     size_t idx;
     if (AuthSrvCtrl_FindCompatibleGameSrv(srv, msg->district, &idx) != 0) {
@@ -1001,14 +1003,17 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     // the load and then kicks the client -- which is exactly the 007 disconnect reported
     // on 2026-10-25.
     connected->char_id = msg->char_id;
-    connected->current_server_id = metadata->server_id;
-    connected->current_player_id = player_token;
-    // Until the new connection is accepted, the old server reporting this player as gone
-    // must not clear the identity below (see AuthSrv_MarkAccountGameDisconnected).
+    // Record the DESTINATION. current_* deliberately keeps saying where the client is
+    // until its new connection proves it moved.
+    if (connected->current_server_id == 0) {
+        connected->current_server_id = conn->server_id;
+        connected->current_player_id = 0;
+    }
+    connected->pending_server_id = metadata->server_id;
+    connected->pending_player_id = player_token;
     connected->transferring = true;
-    connected->last_transfer_ms = sys_get_monotonic_time_ms();
-    log_info("Transfer accepted: account identity now server %u / player token %u (map %d, "
-             "ctrl %s)", metadata->server_id, player_token,
+    log_info("Transfer accepted: server %u -> server %u / token %u (map %d, ctrl %s)",
+             connected->current_server_id, metadata->server_id, player_token,
              (int) metadata->district.map_id,
              metadata->ctrl_conn ? "up" : "pending");
 
@@ -1268,27 +1273,42 @@ void AuthSrv_DoPostHandshake(AuthSrv *srv, Connection *conn)
         uuid_dec_le(&char_id, conn->game_version.character_uuid);
 
         GlobalAccountRegistry *connected = AuthSrv_GetAccount(srv, account_id);
-        if (!uuid_equals(&connected->char_id, &char_id) ||
-            connected->current_server_id != conn->game_version.map_token ||
-            connected->current_player_id != conn->game_version.player_token)
-        {
+        // Either identity is acceptable: the client may have stayed where it was, or taken
+        // the transfer. Comparing values instead of relying on message order is what makes
+        // the asynchrony harmless -- whichever side of the race wins, this connection is
+        // recognised.
+        bool matches_current = (connected->current_server_id == conn->game_version.map_token &&
+                                connected->current_player_id == conn->game_version.player_token);
+        bool matches_pending = (connected->transferring &&
+                                connected->pending_server_id == conn->game_version.map_token &&
+                                connected->pending_player_id == conn->game_version.player_token);
+
+        if (!uuid_equals(&connected->char_id, &char_id) || !(matches_current || matches_pending)) {
             log_warn("User connected to game server with unexpected values: char %s "
-                     "(server %u vs %u, player token %u vs %u)",
+                     "(current %u/%u, pending %u/%u, client sent %u/%u)",
                      uuid_equals(&connected->char_id, &char_id) ? "ok" : "MISMATCH",
-                     connected->current_server_id, conn->game_version.map_token,
-                     connected->current_player_id, conn->game_version.player_token);
+                     connected->current_server_id, connected->current_player_id,
+                     connected->pending_server_id, connected->pending_player_id,
+                     conn->game_version.map_token, conn->game_version.player_token);
             Connection_Free(conn);
             stbds_hmdel(srv->objects, conn->token);
             return;
         }
 
-        // The transfer is complete: this connection is the one the account was moved to,
-        // so the old server's "player left" report is no longer expected.
-        if (connected->transferring) {
-            connected->transferring = false;
-            log_info("Transfer completed: client reconnected to server %u",
+        if (matches_pending) {
+            log_info("Transfer completed: client moved to server %u / token %u",
+                     connected->pending_server_id, connected->pending_player_id);
+            connected->current_server_id = connected->pending_server_id;
+            connected->current_player_id = connected->pending_player_id;
+        } else {
+            log_info("Client reconnected to server %u, which it was already on",
                      connected->current_server_id);
         }
+        connected->pending_server_id = 0;
+        connected->pending_player_id = 0;
+        connected->transferring = false;
+
+
 
         GameSrvMetadata* metadata;
         if ((metadata = AuthSrvCtrl_GetGameSrvMetadata(srv, connected->current_server_id)) == NULL) {

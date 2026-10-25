@@ -103,17 +103,23 @@ typedef struct GlobalAccountRegistry {
         GmUuid account_id; 
     };
     GmUuid    char_id;
+
+    // WHERE THE CLIENT ACTUALLY IS: the server whose game connection last passed the
+    // handshake validation. A fact, not an intention.
     uint32_t  current_server_id;
     uint32_t  current_player_id;
-    // Set while a transfer is in flight. A transfer makes the OLD game server report the
-    // player as gone (`CtrlMsg_PlayerLeft`), and that report must not wipe the identity
-    // the NEW connection is validated against -- it did, and the client was kicked with
-    // error 007 the moment it reconnected.
+
+    // WHERE A TRANSFER WANTS IT TO GO: set when a transfer is accepted, promoted into
+    // `current_*` when the client's new connection passes validation, abandoned if it
+    // never does. Keeping the two apart is what makes message ordering irrelevant: the
+    // handshake accepts either identity, so neither the client's disconnect nor the
+    // server's completion has to arrive first. (An elapsed-time window was tried here
+    // first and rejected: these messages are asynchronous and a clock cannot decide
+    // which of two orderings happened.)
+    uint32_t  pending_server_id;
+    uint32_t  pending_player_id;
     bool      transferring;
-    // When the last transfer was accepted. A duplicate request arriving just after a
-    // successful redirect is the tail of that move, not a new one, and must not mint a
-    // second identity the client never sees.
-    uint64_t  last_transfer_ms;
+
     uintptr_t auth_conn_token;
 } GlobalAccountRegistry;
 
