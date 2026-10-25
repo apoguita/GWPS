@@ -133,6 +133,17 @@ int Connection_ReadVersion(Connection *conn)
         conn->ctrl_version = version;
         return ERR_OK;
     } else {
+        // Not a header we know. Log what actually arrived: when the client's file check was
+        // pointed at us it vanished without a trace here, and the exact-match signature may
+        // simply not be what this connection sends. Guessing cost a build already.
+        char hex[3 * 32 + 1];
+        size_t n_show = size < 32 ? size : 32;
+        for (size_t idx = 0; idx < n_show; ++idx) {
+            snprintf(&hex[idx * 3], 4, "%02X ", data[idx]);
+        }
+        hex[n_show * 3] = '\0';
+        log_info("Connection %04" PRIXPTR ": unexpected first bytes (header 0x%" PRIX32
+                 ", %zu available): %s", conn->source.socket, header, size, hex);
         return ERR_BAD_USER_DATA;
     }
 }
