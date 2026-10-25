@@ -24,8 +24,26 @@ int AuthSrvCtrl_FindCompatibleGameSrv(AuthSrv *srv, GmDistrict district, size_t 
         GameSrvMetadata *metadata = &srv->games[idx];
         if (GmDistrict_IsCompatible(metadata->district, district)) {
             *result = idx;
+            log_info("Reusing server %u for map %d (district %u, type %d, region %d)",
+                     metadata->server_id, (int) district.map_id,
+                     district.district_number, (int) district.map_type,
+                     (int) district.region);
             return ERR_OK;
         }
+    }
+
+    // Nothing matched. Say what was asked for and what exists: a new server for a map
+    // that already has one is either a district mismatch or a bug, and guessing which
+    // costs a test cycle.
+    log_info("No compatible server for map %d (district %u, type %d, region %d, language "
+             "%d); %zu server(s) exist:", (int) district.map_id, district.district_number,
+             (int) district.map_type, (int) district.region, (int) district.language, n_games);
+    for (size_t idx = 0; idx < n_games; ++idx) {
+        GameSrvMetadata *metadata = &srv->games[idx];
+        log_info("  server %u: map %d district %u type %d region %d language %d",
+                 metadata->server_id, (int) metadata->district.map_id,
+                 metadata->district.district_number, (int) metadata->district.map_type,
+                 (int) metadata->district.region, (int) metadata->district.language);
     }
 
     return ERR_UNSUCCESSFUL;
