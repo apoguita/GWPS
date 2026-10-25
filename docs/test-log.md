@@ -696,3 +696,24 @@ Findings:
   exists but is never called with data, and the manifest we send reports "done" behind
   nothing.
 - Current client build keeps File1 and the suffix, redirects the other five.
+
+### 2026-10-25 (later) -- patching hostname strings does NOT detach the client
+
+All six full hostnames redirected (Auth1, File1, Diag, icmp, bug, account), suffix
+ArenaNetworks.com left intact, login succeeds. Sockets while in game:
+
+    127.0.0.1:58403 -> 127.0.0.1:6112        ESTABLISHED   (our auth)
+    127.0.0.1:58411 -> 127.0.0.1:6112        ESTABLISHED   (our game server)
+    192.168.1.5:58400 -> 3.65.211.216:6112   ESTABLISHED
+    192.168.1.5:58401 -> 18.209.181.207:6112 ESTABLISHED   (in File1's A record set)
+    192.168.1.5:58402 -> 63.176.23.57:6112   ESTABLISHED
+
+Conclusion: the client CONSTRUCTS these hostnames from the ArenaNetworks.com suffix, so
+patching the literal strings changes nothing at runtime -- and breaking the suffix breaks
+hostname construction, which is exactly why login failed when it was patched. Three live
+connections to real servers remain.
+
+Ways to actually detach, neither of which is a string patch:
+  1. make the constructed names resolve to loopback (hosts entries), or
+  2. serve the file service ourselves so the client has no reason to reach ArenaNet --
+     which is also the standing suspect for the rare loading-screen hang.
