@@ -2,32 +2,33 @@
 
 Why
 ---
-`GmMapConfig` needs a `map_file_id` per map, and the client will not tell us:
+`GmMapConfig` needs a `map_file_id` per map, and the client will not volunteer it:
 `AreaInfo.file_id` reads 0 for every Pre-Searing map, even while standing in one
-(`docs/06-client-tooling.md`, F5). But the stage-2 `Path` chunk of the blob *is*
-the navmesh, and the client keeps the same navmesh in memory for the loaded map.
-So: compute (plane count, trapezoid count, bounding box) from the client's own
-pathing records, and match it against the same fingerprint computed from Gw.dat by
-`tools/gwdat-pathing.c`.
+(`docs/06-client-tooling.md`, F5), and a blob carries no map identity of its own.
+But the stage-2 `Path` chunk of a blob *is* the navmesh, and the client holds the
+same navmesh for the map it is in. So: fingerprint the client's own pathing records
+(planes, trapezoid count, bounding box) and match it against the same fingerprint
+computed from Gw.dat by `tools/gwdat-pathing.c`.
 
-Three independent numbers have to agree for a match, and 213 blobs are in play, so
-an accidental collision is not a realistic worry; a real match is confirmed by
-loading the blob in the server afterwards.
+A map is stored twice, so the expected answer is a pair. Every map's fingerprint is
+distinct (297 distinct across 594 blobs), so a match is not a coincidence -- but it
+does say "this blob has the navmesh the client is using", not "this blob is that map
+by name". The name comes from `Map.GetMapName`, and from the tester's eyes.
 
 Needs an elevated shell
 -----------------------
 `py4gw.connect()` asserts an elevated token: connecting is a write (block,
 dispatcher, hooks). Start PowerShell as administrator and approve the UAC prompt.
-Unelevated it prints the reason and exits 2. Nothing here changes the game.
+Unelevated the script prints the reason and exits 2. Nothing here changes the game.
 
 Usage
 -----
-    py tools/probe-pathing.py                    # match against build/pathing-fingerprints.csv
-    py tools/probe-pathing.py --csv other.csv
-    py tools/probe-pathing.py --json build/probe-pathing.json
+    py tools/probe-pathing.py --list                  # no elevation, no client needed
+    py tools/probe-pathing.py                         # the only Gw* client running
+    py tools/probe-pathing.py --pid 37264             # a specific one
+    py tools/probe-pathing.py --dump-trapezoids build/map.csv --json build/map.json
 
-Exit codes: 0 matched (or fingerprint printed with no sheet), 2 not elevated,
-3 no client / not in a map, 4 could not read the pathing records.
+Exit codes: 0 ok, 2 not elevated, 3 no client / not in a map, 4 could not read pathing.
 """
 
 from __future__ import annotations
@@ -43,16 +44,12 @@ DEFAULT_PY4GW_ROOT = r"C:\Users\Apo\Py4GW_Stealth"
 DEFAULT_CSV = "build/pathing-all.csv"
 
 
-def hx(value: int) -> str:
-    return f"0x{value:08X}"
-
-
-def find_clients(win32, pid: int | None) -> list[dict]:
+def find_clients(win32, pid):
     """Find the client, including the *patched* one.
 
     ``Win32.find_guild_wars()`` matches the executable name ``Gw.exe``. GWPS tests run
     the patched client, ``Gw.custom.exe`` (see ``scripts/phase0-prepare.ps1``), which
-    that matcher never returns — so this falls back to any process whose name starts
+    that matcher never returns -- so this falls back to any process whose name starts
     with ``gw``, excluding our own server. ``--pid`` skips discovery entirely.
     """
     if pid is not None:
@@ -69,13 +66,61 @@ def find_clients(win32, pid: int | None) -> list[dict]:
             path = None
             try:
                 path, _ = win32._get_image_path(int(entry["pid"]))
-            except Exception:  # noqa: BLE001 - the path is a nicety
+            except Exception:
                 pass
             clients.append({"pid": int(entry["pid"]), "name": name, "path": path})
     return clients
 
 
-def main(argv: list[str]) -> int:
+def fingerprint(pathing_maps):
+    """(planes, trapezoids, bounding box) over the client's own pathing records."""
+    planes = len(pathing_maps)
+    trapezoids = 0
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+    rows = []
+
+    for plane_index, plane in enumerate(pathing_maps):
+        # A plane is a `PathingMap` snapshot, not a list: its trapezoids live
+        # under `.trapezoids` (py4gw/context/map_context.py).
+        for trap in getattr(plane, "trapezoids", ()):
+            for x in (float(trap.XTL), float(trap.XTR), float(trap.XBL), float(trap.XBR)):
+                min_x = min(min_x, x)
+                max_x = max(max_x, x)
+            for y in (float(trap.YT), float(trap.YB)):
+                min_y = min(min_y, y)
+                max_y = max(max_y, y)
+            trapezoids += 1
+            rows.append(
+                "{},{},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}".format(
+                    plane_index, int(getattr(trap, "id", -1)),
+                    float(trap.XTL), float(trap.XTR), float(trap.YT),
+                    float(trap.XBL), float(trap.XBR), float(trap.YB))
+            )
+
+    return ({
+        "planes": planes,
+        "trapezoids": trapezoids,
+        "min_x": round(min_x, 3), "min_y": round(min_y, 3),
+        "max_x": round(max_x, 3), "max_y": round(max_y, 3),
+    }, rows)
+
+
+def match_sheet(sheet, fp):
+    matches = []
+    with sheet.open(newline="", encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            if (int(row["planes"]) == fp["planes"]
+                    and int(row["trapezoids"]) == fp["trapezoids"]
+                    and abs(float(row["min_x"]) - fp["min_x"]) < 0.01
+                    and abs(float(row["min_y"]) - fp["min_y"]) < 0.01
+                    and abs(float(row["max_x"]) - fp["max_x"]) < 0.01
+                    and abs(float(row["max_y"]) - fp["max_y"]) < 0.01):
+                matches.append(row)
+    return matches
+
+
+def main(argv):
     parser = argparse.ArgumentParser(description="Fingerprint the loaded map's navmesh.")
     parser.add_argument("--py4gw-root", default=os.environ.get("PY4GW_STEALTH", DEFAULT_PY4GW_ROOT))
     parser.add_argument("--csv", default=DEFAULT_CSV, help="fingerprint sheet from gwdat_pathing")
@@ -102,15 +147,14 @@ def main(argv: list[str]) -> int:
     win32 = Win32()
 
     if args.list:
-        # No elevation needed to enumerate: this is a process listing.
         candidates = find_clients(win32, None)
         if not candidates:
             print("no Gw*.exe process found")
             return 0
-        print(f"{'pid':>8}  {'name':<16}  path")
+        print("{:>8}  {:<16}  path".format("pid", "name"))
         for entry in candidates:
-            print(f"{int(entry['pid']):>8}  {str(entry.get('name') or '?'):<16}  "
-                  f"{entry.get('path') or '?'}")
+            print("{:>8}  {:<16}  {}".format(
+                int(entry["pid"]), str(entry.get("name") or "?"), entry.get("path") or "?"))
         print("\nprobe one with:  --pid <pid>")
         return 0
 
@@ -126,8 +170,8 @@ def main(argv: list[str]) -> int:
               "named something else)", file=sys.stderr)
         return 3
 
-    report: dict = {"client": {"pid": int(clients[0]["pid"]), "name": clients[0].get("name"),
-                               "path": clients[0].get("path")}}
+    report = {"client": {"pid": int(clients[0]["pid"]), "name": clients[0].get("name"),
+                         "path": clients[0].get("path")}}
     client = py4gw.connect(clients[0])
     try:
         map_id = int(Map.GetMapID() or 0)
@@ -135,20 +179,25 @@ def main(argv: list[str]) -> int:
             print("the client is not in a map (no map id yet)", file=sys.stderr)
             return 3
         report["map"] = {"id": map_id, "name": Map.GetMapName(map_id)}
+        try:
+            report["instance_uptime_s"] = int(Map.GetInstanceUptime())
+        except Exception:
+            pass
 
         try:
             position = Player.GetXY()
-            report["position"] = {"x": round(float(position[0]), 3), "y": round(float(position[1]), 3)}
-            # The plane matters: a GmMapConfig spawn point is (x, y, plane), and the
-            # wrong plane puts the character on another layer of the map.
+            report["position"] = {"x": round(float(position[0]), 3),
+                                  "y": round(float(position[1]), 3)}
             try:
                 from py4gw.agent import Agent
                 agent_id = int(Player.GetAgentID())
                 report["position"]["agent_id"] = agent_id
+                # A GmMapConfig spawn point is (x, y, plane); the wrong plane puts the
+                # character on another layer of the map.
                 report["position"]["plane"] = int(Agent.GetZPlane(agent_id))
-            except Exception as exc:  # noqa: BLE001 - a bonus, not the point
+            except Exception as exc:
                 report["position"]["plane_error"] = repr(exc)
-        except Exception as exc:  # noqa: BLE001 - position is a bonus, not the point
+        except Exception as exc:
             report["position_error"] = repr(exc)
 
         pathing_maps = Map.Pathing.GetPathingMaps()
@@ -156,99 +205,53 @@ def main(argv: list[str]) -> int:
             print("the client reports no pathing records for this map", file=sys.stderr)
             return 4
 
-        planes = len(pathing_maps)
-        trapezoids = 0
-        min_x = min_y = float("inf")
-        max_x = max_y = float("-inf")
+        fp, rows = fingerprint(pathing_maps)
+        report["fingerprint"] = fp
 
-        dump_handle = None
         if args.dump_trapezoids:
-            dump_path = Path(args.dump_trapezoids)
-            dump_path.parent.mkdir(parents=True, exist_ok=True)
-            dump_handle = dump_path.open("w", encoding="utf-8", newline="\n")
-            # Same column order as gwdat_pathing's --trapezoids, so the two dumps
-            # are directly comparable.
-            dump_handle.write("plane,trap_id,xtl,xtr,yt,xbl,xbr,yb\n")
+            out = Path(args.dump_trapezoids)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text("plane,trap_id,xtl,xtr,yt,xbl,xbr,yb\n" + "\n".join(rows) + "\n",
+                           encoding="utf-8")
+            print("  trapezoids dumped -> {}".format(out))
 
-        for plane_index, plane in enumerate(pathing_maps):
-            # A plane is a `PathingMap` snapshot, not a list: the trapezoids live
-            # under `.trapezoids` (py4gw/context/map_context.py).
-            for trap in getattr(plane, "trapezoids", ()):
-                for x in (trap.XTL, trap.XTR, trap.XBL, trap.XBR):
-                    x = float(x)
-                    if x < min_x:
-                        min_x = x
-                    if max_x < x:
-                        max_x = x
-                for y in (trap.YT, trap.YB):
-                    y = float(y)
-                    if y < min_y:
-                        min_y = y
-                    if max_y < y:
-                        max_y = y
-                trapezoids += 1
-                if dump_handle is not None:
-                    dump_handle.write(
-                        f"{plane_index},{int(getattr(trap, 'id', -1))},"
-                        f"{float(trap.XTL):.2f},{float(trap.XTR):.2f},{float(trap.YT):.2f},"
-                        f"{float(trap.XBL):.2f},{float(trap.XBR):.2f},{float(trap.YB):.2f}\n")
-
-        if dump_handle is not None:
-            dump_handle.close()
-            print(f"  trapezoids dumped -> {args.dump_trapezoids}")
-
-        fingerprint = {
-            "planes": planes,
-            "trapezoids": trapezoids,
-            "min_x": round(min_x, 3), "min_y": round(min_y, 3),
-            "max_x": round(max_x, 3), "max_y": round(max_y, 3),
-        }
-        report["fingerprint"] = fingerprint
-        print(f"map {map_id} ({report['map']['name']})")
+        print("map {} ({})   instance uptime {}s".format(
+            map_id, report["map"]["name"], report.get("instance_uptime_s", "?")))
         if "position" in report:
-            print(f"  player position  {report['position']['x']}, {report['position']['y']}"
-                  f"   <- a usable spawn point for this map")
-        print(f"  fingerprint      planes={planes} trapezoids={trapezoids} "
-              f"bounds=({min_x:.3f}, {min_y:.3f}) .. ({max_x:.3f}, {max_y:.3f})")
+            where = report["position"]
+            print("  player position  {}, {}   plane {}   <- a usable spawn point for this map"
+                  .format(where["x"], where["y"], where.get("plane", "?")))
+        print("  fingerprint      planes={} trapezoids={} bounds=({}, {}) .. ({}, {})".format(
+            fp["planes"], fp["trapezoids"], fp["min_x"], fp["min_y"], fp["max_x"], fp["max_y"]))
 
         sheet = Path(args.csv)
         if not sheet.is_file():
-            print(f"\nno fingerprint sheet at {sheet}; run gwdat_pathing first", file=sys.stderr)
+            print("\nno fingerprint sheet at {}; run gwdat_pathing first".format(sheet),
+                  file=sys.stderr)
             return 0
 
-        matches = []
-        with sheet.open(newline="", encoding="utf-8-sig") as handle:
-            for row in csv.DictReader(handle):
-                if (int(row["planes"]) == planes
-                        and int(row["trapezoids"]) == trapezoids
-                        and abs(float(row["min_x"]) - min_x) < 0.01
-                        and abs(float(row["min_y"]) - min_y) < 0.01
-                        and abs(float(row["max_x"]) - max_x) < 0.01
-                        and abs(float(row["max_y"]) - max_y) < 0.01):
-                    matches.append(row)
-
+        matches = match_sheet(sheet, fp)
         report["matches"] = matches
         if not matches:
-            print("\nNO MATCH in the sheet. The loaded navmesh is not one of the fingerprinted "
-                  "blobs; re-run gwdat_pathing over the full size range.", file=sys.stderr)
+            print("\nNO MATCH in the sheet. Either the map is not a RIFF map blob, or the "
+                  "sheet was built with a size floor (never filter maps by compressed "
+                  "size). Fall back to --find-floats in gwdat_pathing.", file=sys.stderr)
             return 4
 
-        print(f"\n{len(matches)} matching blob(s) â€” a map is stored twice, so two is the expected "
-              f"answer:")
+        print("\n{} matching blob(s), a map is stored twice so two is the expected answer:"
+              .format(len(matches)))
         for row in matches:
-            print(f"  file_id {row['file_id']}  size={row['size']}  "
-                  f"planes={row['planes']} trapezoids={row['trapezoids']}")
-        print(f"\nGmMapConfig candidate:\n"
-              f"    .map_id      = {map_id},\n"
-              f"    .map_file_id = {matches[0]['file_id']},   // confirm with the twin above")
+            print("  file_id {}  size={}  planes={} trapezoids={}".format(
+                row["file_id"], row["size"], row["planes"], row["trapezoids"]))
+        print("\nGmMapConfig candidate for map {}:\n    .map_file_id = {},".format(
+            map_id, matches[0]["file_id"]))
         return 0
     finally:
         py4gw.disconnect()
         if args.json:
             Path(args.json).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-            print(f"\nreport -> {args.json}")
+            print("\nreport -> {}".format(args.json))
 
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

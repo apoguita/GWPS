@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 GmMapConfig s_KamadanJewelOfIstanOutpost = {
     .map_id = MapId_KamadanJewelOfIstanOutpost,
@@ -29,6 +29,31 @@ GmMapConfig s_AscalonCityPreSearing = {
     .n_spawnpoints = 1,
     .spawnpoints = {
         { 9541.873f, 4796.456f, 0 },
+    },
+};
+
+// Lakeside County, map id 146 -- configured on a HYPOTHESIS that needs one test.
+//
+// The live client, standing in Lakeside County (map 146, an explorable), reports the
+// same navmesh as Ascalon City (map 148, an outpost): 58 planes, 6120 trapezoids,
+// bounds -18432,-24576 .. 21504,24576. Those are the numbers of blob 0x1B97D, the
+// blob that loads Ascalon City correctly. Two readings are possible:
+//
+//   (a) pre-Searing maps share one region-scale navmesh, so 146 legitimately uses the
+//       same blob -- this config is then right;
+//   (b) Map.Pathing.GetPathingMaps() was serving the previous map's records, so the
+//       fingerprint says nothing about 146 and this file id may be wrong.
+//
+// A blob carries no map identity (checked: no name string, no name_id in map 148's or
+// Kamadan's blob), so the blob cannot settle it. The terrain the client draws can:
+// if this config is right the character stands in Lakeside's open country, if it is
+// wrong the character stands in Ascalon City while the map id says 146.
+GmMapConfig s_LakesideCounty = {
+    .map_id = MapId_LakesideCounty,
+    .map_file_id = 0x1B97D,
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 6602.f, 4485.f, 0 },
     },
 };
 
@@ -64,6 +89,8 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return &s_KamadanJewelOfIstanOutpost;
     case MapId_AscalonCityPreSearing:
         return &s_AscalonCityPreSearing;
+    case MapId_LakesideCounty:
+        return &s_LakesideCounty;
     case MapId_KainengCenterOutpost:
         return &s_KainengCenterOutpost;
     case MapId_LionsArchOutpost:
@@ -78,3 +105,4 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return NULL;
     }
 }
+
