@@ -717,3 +717,33 @@ Ways to actually detach, neither of which is a string patch:
   1. make the constructed names resolve to loopback (hosts entries), or
   2. serve the file service ourselves so the client has no reason to reach ArenaNet --
      which is also the standing suspect for the rare loading-screen hang.
+
+### 2026-10-25 (final) -- the file-server connections cannot be patched out of the client
+
+Tried, in order, and each ruled out by measurement:
+
+1. Redirect every hostname literal in the exe (Auth1, File1, Diag, icmp, bug, account):
+   login works, and the client's outbound sockets are UNCHANGED -- three real servers before,
+   three after. The literals are not what it dials.
+2. Redirect the domain suffix ArenaNetworks.com: login breaks. The client builds names from
+   that domain (the .data tables hold ArenaNetworks.com next to NCPlatform.net, and full names
+   such as Cligate.1.NcPlatform.Net), so breaking it breaks name construction itself.
+3. Hosts entries for Auth1/File1..File6/Diag/icmp/account: a file check DID arrive at our
+   server on loopback and was answered ("File check on 0114: answered 32 of 32 bytes"), but one
+   socket still reached a real server. After flushing the DNS cache, entries for file2 and
+   file6 reappeared even though both were in hosts -- the client resolves those names through a
+   path that ignores the hosts file.
+4. Constructed name to loopback: not possible. Windows resolves "localhost" but not
+   "File1.localhost", so a name the client builds cannot be made to resolve locally by patching.
+
+Conclusion: the file-server connections are made from names the client builds and resolves via
+DNS. The only interception points are the hosts file (or answering DNS with a local resolver).
+Hosts is machine-wide and collides with retail play, so it is reverted by default and available
+as tools/hosts-gwps.ps1 -Enable when needed.
+
+What IS proven to work: our server answers the file check correctly when it receives it. The
+handler stays (AuthSrv_TryHandleFileCheck), because it is what makes the hosts approach function
+and it is the necessary half of any DNS-based solution later.
+
+State left behind: client patched with DH keys + mutex check only; hosts clean; three file-server
+sockets to ArenaNet remain, which is where this started.
