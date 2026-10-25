@@ -296,3 +296,47 @@ Action: schedule (Phase 1), not a Phase 0 blocker.
 Phase 0 exit criteria 1-3 are met: one client logs in, creates a character, spawns
 in Kamadan, and moves; no unexplained crash. Criteria 4-6 remain: T9/T11/T13/T14
 (two clients, chat, stability, reconnect) have not been exercised yet.
+
+---
+
+## Tooling — packet sniffer ported into Py4GW_Stealth — PASS — 2026-10-24
+
+The packet sniffer, until now only available inside Reforged's injected `Py4GW.dll`,
+is ported to `Py4GW_Stealth` (`py4gw/packet_sniffer.py` over
+`py4gw/native_src/packets/py_packet_sniffer.py`) and live-verified in both
+directions. This is the copy GWPS tests should use: it captures from a separate
+process and needs no injected DLL.
+
+Evidence — `Py4GW_Stealth/tests/live_reports/live_all.log`, `Gw.exe` pid 6616,
+client build 39112:
+
+```
+--- connected to pid 6616; block at 0x0DA80000..0x0DB2A640; capture area at +0x448 (4096 bytes)
+--- captured StoC 0x001E size=8 copied=8 head=1e 00 00 00 fd 01 00 00
+--- outbound capture: 1 stub hit(s), 1 logged
+--- captured CToS 0x0039 size=12 copied=12 head=39 00 00 00 12 00 00 00 00 00 00 00
+--- disconnected from pid 6616
+```
+
+Every replaced handler entry was restored and the array verified byte-identical;
+client stayed alive. Suite: 5 tests, 1 skipped (narrow capture saw no traffic),
+`OK (skipped=1)`.
+
+**Requirement: an elevated shell (one UAC prompt).** `py4gw.connect()` asserts
+elevation because connecting is a write — block, dispatcher, hooks. A process
+cannot raise its own token, so the shell must be started as administrator.
+Documented in `06-client-tooling.md` → "Where we actually run it".
+
+Consequence for Phase 0: T3/T7/T10/T12/T15 can assert on captured bytes instead of
+on a screenshot. First target is F7 — confirm `0x3D` is 28 bytes on the wire
+(4-byte header + our 24-byte payload, matching `KNOWN_CTOS_LENGTHS[0x3D]` and
+`{61, 5, GAME_CMSG_0061, 26}`) and identify the second vector.
+
+Findings: none of ours. Two hazards recorded rather than fixed here:
+
+- an unattributed injected-code crash on the first live attempt (`c0000005` writing
+  `0x096D1000` from `0x096D0FFF` while Reforged's "Travel On Character Load" ran),
+  which is why the suite is staged for attribution;
+- a second runtime rewriting handler entries after the restore, so **run one
+  sniffer at a time** and read an entry mismatch as another runtime's, not as a
+  failed restore.

@@ -10,7 +10,7 @@ deep, *programmatic* access to the real Guild Wars client:
 |---------|------|------------|
 | **Py4GW Reforged** | `C:\Users\Apo\Py4GW_Reforged` | Python automation library that runs **inside** the client via an injected DLL |
 | **Py4GW Reforged Native** | `C:\Users\Apo\Py4GW_Reforged_Native` | The C++ backend (`Py4GW.dll`): hooks D3D9, embeds CPython, resolves symbols from `offsets/*.json` |
-| **Py4GW Stealth** | `C:\Users\Apo\Py4GW_Stealth` | External-host port: reads client state from a **separate** Python process; hooks only if you opt in |
+| **Py4GW Stealth** | `C:\Users\Apo\Py4GW_Stealth` | External-host port: reads client state from a **separate** Python process; hooks only if you opt in — and, since 2026-10-24, **both halves of the packet sniffer** (see "Where we actually run it") |
 
 All three are ours (same author as OpenTyria). Treat them as first-class
 dependencies of this project's *development loop*, even though GWPS ships
@@ -20,7 +20,7 @@ without them.
 
 | Capability | Where | Why GWPS cares |
 |-----------|-------|---------------------|
-| **StoC + CToS packet capture** | `Py4GWCoreLib/PacketSniffer.py`, `include/GW/packet_sniffer/packet_sniffer.h` | The test oracle. Lets us diff our byte stream against a real server's |
+| **StoC + CToS packet capture** | Reforged: `Py4GWCoreLib/PacketSniffer.py`, `include/GW/packet_sniffer/packet_sniffer.h`. Stealth: `py4gw/packet_sniffer.py` (ported, live-verified 2026-10-24) | The test oracle. Lets us diff our byte stream against a real server's |
 | **`AreaInfo` table (map → file id)** | `include/GW/context/map.h:87-131`, `src/GW/map/map_methods.cpp:203-213` | **Solves the `map_file_id` problem** (see below) |
 | **`GWDatReader`** | `include/GW/textures/gw_dat_reader.h` | Reads any `Gw.dat` file using the game's *own* decoder |
 | **Map/pathing context** | `include/GW/context/map.h:202-256`, `include/GW/context/pathing.h` | Ground truth for what the client believes the map is |
@@ -261,14 +261,123 @@ What that buys us, concretely:
 4. **Automated regression.** Once a sequence is scripted, the same capture can run
    on every commit and be compared to the golden file.
 
+### Where we actually run it: the sniffer is ported into Stealth (live, 2026-10-24)
+
+The capture above used to exist only inside Reforged, i.e. only inside an injected
+DLL. It now also exists in **Py4GW_Stealth**, which is where GWPS tests should
+take it from: same two capture paths, driven from an external Python process.
+
+| Piece | Path in `C:\Users\Apo\Py4GW_Stealth` |
+|-------|--------------------------------------|
+| Facade + decoder (`PacketSniffer`, `SNIFFER`, `PacketLogEntry`) | `py4gw/packet_sniffer.py` |
+| The `PyPacketSniffer` module port (12-member facade, lifecycle, log) | `py4gw/native_src/packets/py_packet_sniffer.py` |
+| StoC capture install — `PacketHooks.install(..., captures=)` | `py4gw/game_thread/packets.py` |
+| CToS capture install — `install_send_capture` on `packet_sniffer.ctos_send_target` | `py4gw/game_thread/bridge.py` |
+| Resolver | `offsets/packet_sniffer.json` |
+| Port record and its evidence | `docs/PACKET_SNIFFER_PORT.md`, `docs/CLASS_PORT_MAP.md` |
+| Live suite + reports | `tests/test_live_packet_sniffer.py`, `tests/live_reports/` |
+
+The mechanism is unchanged from the native source, and it is worth knowing which
+half is which, because they are different kinds of write:
+
+- **StoC** is *not* a function hook. It replaces the handler entry of **every**
+  header (488 of them) in the client's own `StoCHandlerArray` with emitted stub
+  code, and puts every entry back on `terminate`. It restores and then asserts the
+  array is byte-identical to how it found it.
+- **CToS** is an entry hook on the one send wrapper
+  (`void __cdecl(void* ctx, uint32_t size, const void* packet)`), resolved by
+  pattern; it is idempotent and is taken out on `TerminateCToS` or a disconnect.
+
+Capture bounds: **512 B** of a StoC packet, **4096 B** of a CToS one. A longer
+CToS packet is *dropped, not clipped*, and the log is capped — oldest entry goes
+first. Do not treat a capture as complete over a long session; drain it.
+
+#### API
+
+```python
+from py4gw.packet_sniffer import SNIFFER
+
+SNIFFER.initialize("StoC")          # 'StoC' | 'CToS' | 'both'; idempotent
+for entry in SNIFFER.get_logs("StoC"):
+    # PacketLogEntry(direction, tick, header, size, data: bytes)
+    name = SNIFFER.get_packet_name("StoC", entry.header)
+    print(f"{name} size={entry.size} head={entry.data[:8].hex(' ')}")
+    print(SNIFFER.decode_packet("StoC", entry.header, entry.size, entry.data))
+SNIFFER.clear_logs("StoC")
+SNIFFER.terminate("StoC")           # puts the entries back
+```
+
+The decoder tables are transcribed from Reforged and are the useful part for a
+quick read: `STOC_HEADER_NAMES` (247 names), `KNOWN_CTOS_LENGTHS` (12 known
+lengths, e.g. `0x3D → 28`, `0x39 → 12`), `GENERIC_VALUE_IDS`, and
+`NAME_RE_STOC_HEADERS` (the 15 headers that carry UTF-16 names).
+
+#### Running it costs one UAC prompt
+
+`py4gw.connect()` **asserts an elevated token** and refuses without one, because
+connecting opens the process for write (`PROCESS_VM_WRITE`,
+`PROCESS_CREATE_THREAD`, `PROCESS_SUSPEND_RESUME`) and Windows denies those to an
+unelevated caller. A process cannot raise its own token, so:
+
+1. Start the shell **as administrator** (the UAC prompt is the user's to approve).
+2. With the client running and standing in a map:
+
+```powershell
+python -m unittest tests.test_live_packet_sniffer -v          # StoC only
+$env:PY4GW_LIVE_CTOS = "1"; python -m unittest tests.test_live_packet_sniffer -v
+```
+
+There is no "read-only sniffer" mode to fall back on: the whole point is the write.
+Offline checks (`tests/test_packet_sniffer_offline.py`) exercise the tables and both
+stubs against a fake block and need no client and no elevation — run those first.
+
+#### Verified live, 2026-10-24 (pid 6616, client build 39112)
+
+```
+--- connected to pid 6616; block at 0x0DA80000..0x0DB2A640; capture area at +0x448 (4096 bytes)
+--- captured StoC 0x001E size=8  copied=8  head=1e 00 00 00 fd 01 00 00
+--- outbound capture: 1 stub hit(s), 1 logged
+--- captured CToS 0x0039 size=12 copied=12 head=39 00 00 00 12 00 00 00 00 00 00 00
+--- disconnected from pid 6616
+```
+
+Both directions, both installs, every replaced entry restored, client alive. Note
+`CToS 0x0039` reports `size=12`, which is its entry in `KNOWN_CTOS_LENGTHS` — the
+lengths are **total bytes on the wire, 4-byte header word included**.
+
+#### Two hazards, both learned the hard way
+
+- **A live crash is not automatically ours.** The first attempt (2026-10-24
+  20:47:39) died with `c0000005` writing `0x096D1000` from `0x096D0FFF` — injected
+  code — while Reforged's `Main.Update → "Travel On Character Load"` was running.
+  The suite is now staged for attribution: it prints the block's address and span
+  at connect, takes a **narrow capture first**, hides the outbound half behind
+  `PY4GW_LIVE_CTOS`, and verifies restoration. Keep that discipline.
+- **One runtime at a time.** Reforged's own sniffer also registers every header and
+  can rewrite entries from its own snapshot without any write of ours, which the
+  live run observed after the restore
+  (`--- entries rewritten by another runtime after the restore: {'0x84': …, '0x85': …}`).
+  Do not run both sniffers at once, and treat an entry mismatch as *another
+  runtime's*, not as a failed restore.
+
+#### What GWPS should use it for first
+
+The `0x3D` position stream (finding F7) is the obvious first target: our handler
+was written from `msgdefs`' format table, never from a decoded packet. The client's
+own table says `KNOWN_CTOS_LENGTHS[0x3D] = 28`, i.e. **4-byte header + a 24-byte
+payload**, which agrees with `GameSrv_PositionUpdate` (2-byte header + `pos`,
+`plane`, `unknown_vec`, `unknown`) and with the format entry
+`{61, 5, GAME_CMSG_0061, 26}`. A capture turns that agreement into proof and says
+what the second vector actually is.
+
 ## Recommended division of labour
 
 | Task | Tool | Why |
 |------|------|-----|
 | Dump `map_id → file_id` for all maps | Native `AreaInfo` via read-only pointer walk | Authoritative, no loading, no guessing |
 | Cross-check our `Gw.dat` reader | `GWDatReader::ReadDatFileById` (`gw_dat_reader.h:98`) | Uses the game's own decoder — an independent oracle for `FaArchive`/`FaCompress` |
-| Verify our server's output | `PacketSniffer` StoC | Byte-exact |
-| Verify we parse client input | `PacketSniffer` CToS | Byte-exact |
+| Verify our server's output | `SNIFFER.get_logs("StoC")` in `Py4GW_Stealth` (elevated shell) | Byte-exact, from an external process |
+| Verify we parse client input | `SNIFFER.get_logs("CToS")` (elevated, `PY4GW_LIVE_CTOS=1`) | Byte-exact, hooks the client's send wrapper |
 | Understand a missing feature | capture first, Ghidra last | See `05-reverse-engineering.md` |
 | Two-client tests | `multibox` + scripted clients | Repeatable instead of manual |
 | Automated test harness outside the client | shared memory cache (`GlobalCache/shared_memory_src/`) | Read state from any process |
@@ -277,10 +386,14 @@ What that buys us, concretely:
 
 - **GWPS must not depend on Py4GW at runtime.** These are development and
   verification tools. The server stays standalone C.
-- **Prefer read-only.** `Py4GW_Stealth` is read-only unless you pass
-  `game_thread=True`; the native sniffer is passive by design
-  (`packet_sniffer.h:32-35` notes capture stays off until a consumer asks). Read
-  paths are safe; hook installation modifies `Gw.exe` in memory. Do not make
+- **Elevation is a precondition, not a preference.** In `Py4GW_Stealth`,
+  `py4gw.connect()` asserts an elevated token and refuses without one: connecting
+  *is* a write (block, dispatcher, hooks). Start the shell as administrator and
+  approve the UAC prompt. Work that must stay read-only avoids connecting
+  altogether — `tools/gw_scan.py`, `tools/resolve_offline.py` and the probes that
+  read through `ProcessMemoryReader` run unelevated, against the live process or
+  against `Gw.exe` on disk. The sniffer's capture stays off until a consumer asks
+  for it (`packet_sniffer.h:32-35`), but asking for it is a write. Do not make
   client modification a requirement for verifying server behaviour.
 - **Never commit captures containing names or account data.** Packet logs will
   contain UTF-16 player names and UUIDs. Sanitise before adding a golden capture
