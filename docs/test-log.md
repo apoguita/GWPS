@@ -172,3 +172,51 @@ Finding:
   fill `GmMapConfig`.
 - F6 — The AreaInfo array is shorter than 900 entries: ids 898/899 read garbage
   (`region = 1130133319`). Action: bound scans below ~898.
+
+---
+
+## T1 — Web gate — PASS — 2026-10-25 — `68da4a4`
+
+`python tools/webgate.py` serves plain HTTP on port 6601 (no TLS, despite the
+`import ssl`). Full flow exercised with a second process:
+
+```
+GET  /Spawned/WebGate/session/create.xml
+  -> 200  <Reply><Session>D5B6A144-8908-4A30-930A-7CD58E075249</Session></Reply>
+POST /Spawned/WebGate/users/login.xml   (Authorization: Arena <session>)
+  -> 200  <UserId>FA520EE2-4419-4EB4-AE49-6E9ABE6EF24F</UserId>
+          <LoginName>user1@example.com</LoginName>
+```
+
+The returned UserId matches the `user1@example.com` entry hardcoded in
+`tools/webgate.py:6`. Session, login and user resolution all work.
+
+Findings: none.
+
+---
+
+## T2 — Server binds — PASS — 2026-10-25 — `68da4a4`
+
+```
+[..] info: AuthSrv listen to '127.0.0.1:6112'
+[..] info: AuthSrv listen to '127.0.0.1:6113'
+[..] info: AuthSrv listen to '127.0.0.1:1337'
+```
+Process stays alive; still to confirm clean Ctrl+C exit and that `sys_free()`
+reports no warning.
+
+---
+
+## Prerequisites P1–P6 — PASS — 2026-10-25
+
+`./scripts/phase0-prepare.ps1` completed all five steps:
+
+- built `presearing_server.exe` and `portal.dll`
+- `db/database.db` already seeded (left untouched)
+- copied `Gw.dat` (3,486 MB) into the repo root -- the server opens it relative to
+  its working directory (`GameSrv.c:103`)
+- patched `F:\GW\GW1\Gw.exe` -> `Gw.custom.exe`: DH keys found at `0xa945a0`
+  (RVA `0x6945a0`), mutex `AN-Mutex-Window` -> `AN-Futex`
+- staged `portal.dll` next to `Gw.custom.exe`
+
+Remaining Phase 0 work is T3 onward: all require launching the patched client.
