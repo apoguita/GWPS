@@ -1886,6 +1886,9 @@ int GameSrv_ProcessPlayerMessage(GameSrv *srv, uint16_t player_id, GameCliMsg *m
     case GAME_CMSG_MOVE_TO_COORD:
         err = GameSrv_HandleMoveToCoord(srv, player_id, &msg->move_to_coord);
         break;
+    case GAME_CMSG_POSITION_UPDATE:
+        err = GameSrv_HandlePositionUpdate(srv, player_id, &msg->position_update);
+        break;
     case GAME_CMSG_CANCEL_MOVEMENT:
         err = GameSrv_HandleCancelMovement(srv, player_id);
         break;

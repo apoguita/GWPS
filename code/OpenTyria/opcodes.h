@@ -82,6 +82,7 @@
 #define GAME_CMSG_DEPOSIT_FACTION                       (GAME_CMSG_MASK | 0x0035) // 53
 #define GAME_CMSG_INTERACT_LIVING                       (GAME_CMSG_MASK | 0x0039) // 57
 #define GAME_CMSG_SEND_DIALOG                           (GAME_CMSG_MASK | 0x003B) // 59
+#define GAME_CMSG_POSITION_UPDATE                       (GAME_CMSG_MASK | 0x003D) // 61
 #define GAME_CMSG_MOVE_TO_COORD                         (GAME_CMSG_MASK | 0x003E) // 62
 #define GAME_CMSG_INTERACT_ITEM                         (GAME_CMSG_MASK | 0x003F) // 63
 #define GAME_CMSG_ROTATE_PLAYER                         (GAME_CMSG_MASK | 0x0040) // 64

@@ -3,6 +3,14 @@
 // This is way too nice, but we are not implemented a real server anyway...
 #define MAXIMUM_ALLOWED_CORRECTION 100.f
 
+// The client reports its own position roughly twice a second (GAME_CMSG_POSITION_UPDATE).
+// How far it is allowed to have moved between two reports is derived from the
+// agent's own speed, plus this slack for timing jitter and rounding.
+#define POSITION_UPDATE_TOLERANCE       50.f
+// Cap on the elapsed window credited to the client, so a paused/suspended server
+// cannot be used to justify a teleport.
+#define POSITION_UPDATE_MAX_ELAPSED_MS  2000
+
 bool GameSrv_AgentBaseClassIsPlayer(GmAgent *agent)
 {
     return (agent->model_id & CHAR_CLASS_BASE_MASK) == CHAR_CLASS_PLAYER_BASE;
@@ -386,6 +394,70 @@ int GameSrv_HandleMoveToCoord(GameSrv *srv, uint16_t player_id, GameSrv_MoveToCo
         GameSrv_BroadcastAgentPosition(srv, agent);
     }
 
+    return ERR_OK;
+}
+
+// The client reports its own position about twice a second. The server used to
+// discard these entirely, so `agent->position` only ever advanced from move
+// destinations and pathing; the two views drifted apart and every later attempt
+// to correct looked illegal (see GameSrv_HandleLastPosOnMoveCanceled).
+//
+// This adopts the client's position when it is reachable at the agent's own
+// speed since the previous report, and otherwise pulls the server's copy toward
+// it by that same budget instead of snapping. A malformed or hostile packet can
+// therefore never teleport anyone.
+int GameSrv_HandlePositionUpdate(GameSrv *srv, uint16_t player_id, GameSrv_PositionUpdate *msg)
+{
+    GmAgent *agent;
+    if ((agent = GameSrv_GetAgentByPlayerId(srv, player_id)) == NULL) {
+        log_error("Unknow player with player id %u", player_id);
+        return ERR_SERVER_ERROR;
+    }
+
+    uint16_t plane = (uint16_t) msg->plane;
+
+    int64_t elapsed_ms = (agent->last_position_update == 0)
+        ? POSITION_UPDATE_MAX_ELAPSED_MS
+        : srv->current_frame_time - agent->last_position_update;
+    if (elapsed_ms <= 0 || POSITION_UPDATE_MAX_ELAPSED_MS < elapsed_ms) {
+        elapsed_ms = POSITION_UPDATE_MAX_ELAPSED_MS;
+    }
+    agent->last_position_update = srv->current_frame_time;
+
+    float elapsed_s = (float) elapsed_ms / 1000.f;
+    float allowed = agent->speed_base * elapsed_s + POSITION_UPDATE_TOLERANCE;
+    float distance = Vec2f_Dist2(agent->position.v2, msg->pos);
+
+    if (plane != agent->position.plane) {
+        // A plane change is legitimate when it is close by (stairs, a short
+        // portal) and suspicious when it is not.
+        if (allowed < distance) {
+            log_trace(
+                "Player %u position update across planes refused (plane %u -> %u, distance %.1f > %.1f)",
+                player_id, agent->position.plane, plane, distance, allowed);
+            return ERR_OK;
+        }
+        agent->position.plane = plane;
+        agent->position.v2 = msg->pos;
+        return ERR_OK;
+    }
+
+    if (distance <= allowed) {
+        agent->position.v2 = msg->pos;
+        return ERR_OK;
+    }
+
+    // Out of budget: move as far as the budget allows, along the reported
+    // direction, rather than accepting the whole jump or dropping it.
+    Vec2f dir = Vec2fSub(msg->pos, agent->position.v2);
+    if (!Vec2fIsZero(dir)) {
+        dir = Vec2fDiv(dir, distance);
+        agent->position.x += dir.x * allowed;
+        agent->position.y += dir.y * allowed;
+    }
+    log_trace(
+        "Player %u position update clamped (distance %.1f > %.1f)",
+        player_id, distance, allowed);
     return ERR_OK;
 }
 

@@ -29,6 +29,7 @@ typedef struct GmAgent {
     AgentType     agent_type;
     float         speed_base;
     float         speed;
+    int64_t       last_position_update; // server frame time of the last GAME_CMSG_POSITION_UPDATE
     uint32_t      level;
     uint32_t      effects;
     uint32_t      player_team_token;
@@ -68,5 +69,6 @@ void GameSrv_SendWorldAgents(GameSrv *srv, GameConnection *conn, GmAgent *player
 void GameSrv_WorldTick(GameSrv *srv);
 
 int GameSrv_HandleMoveToCoord(GameSrv *srv, uint16_t player_id, GameSrv_MoveToCoord *msg);
+int GameSrv_HandlePositionUpdate(GameSrv *srv, uint16_t player_id, GameSrv_PositionUpdate *msg);
 int GameSrv_HandleCancelMovement(GameSrv *srv, uint16_t player_id);
 int GameSrv_HandleLastPosOnMoveCanceled(GameSrv *srv, uint16_t player_id, GameSrv_LastPosBeforeMoveCanceled *msg);

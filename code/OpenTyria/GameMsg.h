@@ -563,6 +563,17 @@ typedef struct GameSrv_AgentStopMoving {
     uint32_t agent_id;
 } GameSrv_AgentStopMoving;
 
+typedef struct GameSrv_PositionUpdate {
+    uint16_t header;
+    Vec2f    pos;
+    uint32_t plane;
+    // The client also sends a second vector and a dword here. Their meaning is
+    // not confirmed (a direction, most likely), so they are parsed to keep the
+    // struct layout right but deliberately not acted on.
+    Vec2f    unknown_vec;
+    uint32_t unknown;
+} GameSrv_PositionUpdate;
+
 typedef struct GameSrv_LastPosBeforeMoveCanceled {
     uint16_t header;
     Vec2f    pos;
@@ -646,6 +657,7 @@ typedef union GameCliMsg {
     GameSrv_CharCreationConfirm          char_creation_confirm;
     GameSrv_ChatMessage                  chat_message;
     GameSrv_MoveToCoord                  move_to_coord;
+    GameSrv_PositionUpdate               position_update;
     GameSrv_LastPosBeforeMoveCanceled    last_pos_before_move_canceled;
     GameSrv_DropItem                     drop_item;
 } GameCliMsg;
