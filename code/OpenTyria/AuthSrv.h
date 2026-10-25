@@ -110,6 +110,10 @@ typedef struct GlobalAccountRegistry {
     // the NEW connection is validated against -- it did, and the client was kicked with
     // error 007 the moment it reconnected.
     bool      transferring;
+    // When the last transfer was accepted. A duplicate request arriving just after a
+    // successful redirect is the tail of that move, not a new one, and must not mint a
+    // second identity the client never sees.
+    uint64_t  last_transfer_ms;
     uintptr_t auth_conn_token;
 } GlobalAccountRegistry;
 

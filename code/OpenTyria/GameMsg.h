@@ -651,9 +651,14 @@ typedef struct GameSrv_TransferGameServerInfo {
     uint8_t  host[24];
     uint32_t map_token;
     uint32_t region;
-    uint32_t map_id;
-    uint32_t is_explorable;
+    // The player token comes BEFORE map_id. Evidence, not preference: with map_id here
+    // the client connected to the new server echoing player_token = 148 -- it read our map
+    // id out of the slot where it keeps the player token, and was kicked for 'unexpected
+    // values'. The server id matched, so map_token is in the right slot; this swap is
+    // what the rest of the layout follows from.
     uint32_t player_token;
+    uint32_t is_explorable;
+    uint32_t map_id;
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {

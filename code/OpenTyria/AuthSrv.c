@@ -920,6 +920,14 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
         // future teleport forever (observed 2026-10-25: registry said 1247356963, the
         // player was on 3898186703 and every /tp after that was 'ignored as stale').
         // The requester is the server actually hosting the player, so trust it and resync.
+        uint64_t since_transfer_ms = sys_get_monotonic_time_ms() - connected->last_transfer_ms;
+        if (since_transfer_ms < 5000) {
+            log_info("Ignoring a transfer request from server %u: a transfer was accepted "
+                     "%llu ms ago and the registry points at server %u, which is that "
+                     "transfer's target", conn->server_id,
+                     (unsigned long long) since_transfer_ms, connected->current_server_id);
+            return ERR_OK;
+        }
         log_warn("Resyncing the account to server %u (registry said %u): the last transfer "
                  "never completed, so the registry was stale",
                  conn->server_id, connected->current_server_id);
@@ -998,6 +1006,7 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     // Until the new connection is accepted, the old server reporting this player as gone
     // must not clear the identity below (see AuthSrv_MarkAccountGameDisconnected).
     connected->transferring = true;
+    connected->last_transfer_ms = sys_get_monotonic_time_ms();
     log_info("Transfer accepted: account identity now server %u / player token %u (map %d, "
              "ctrl %s)", metadata->server_id, player_token,
              (int) metadata->district.map_id,
