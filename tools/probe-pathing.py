@@ -119,16 +119,26 @@ def fingerprint(pathing_maps):
     }, rows)
 
 
-def match_sheet(sheet, fp):
+def match_sheet(sheet, fp, tolerance=0.0):
+    """Rows matching the fingerprint. ``tolerance`` allows a trapezoid-count delta.
+
+    Exact matching is the normal case. A small delta is a real possibility, not a
+    rounding artefact: The Northlands reads 6889 trapezoids in the client and 6890
+    through `GmImportMap` for the two blobs whose planes and bounds match exactly, so
+    the importer and the client can disagree by one. Callers should treat a tolerant
+    match as "verify by terrain", never as proof.
+    """
     matches = []
     with sheet.open(newline="", encoding="utf-8-sig") as handle:
         for row in csv.DictReader(handle):
-            if (int(row["planes"]) == fp["planes"]
-                    and int(row["trapezoids"]) == fp["trapezoids"]
-                    and abs(float(row["min_x"]) - fp["min_x"]) < 0.01
-                    and abs(float(row["min_y"]) - fp["min_y"]) < 0.01
-                    and abs(float(row["max_x"]) - fp["max_x"]) < 0.01
-                    and abs(float(row["max_y"]) - fp["max_y"]) < 0.01):
+            if int(row["planes"]) != fp["planes"]:
+                continue
+            if abs(int(row["trapezoids"]) - fp["trapezoids"]) > tolerance:
+                continue
+            if (abs(float(row["min_x"]) - fp["min_x"]) < 0.5
+                    and abs(float(row["min_y"]) - fp["min_y"]) < 0.5
+                    and abs(float(row["max_x"]) - fp["max_x"]) < 0.5
+                    and abs(float(row["max_y"]) - fp["max_y"]) < 0.5):
                 matches.append(row)
     return matches
 
@@ -259,9 +269,25 @@ def main(argv):
         matches = match_sheet(sheet, fp)
         report["matches"] = matches
         if not matches:
-            print("\nNO MATCH in the sheet. Either the map is not a RIFF map blob, or the "
-                  "sheet was built with a size floor (never filter maps by compressed "
-                  "size). Fall back to --find-floats in gwdat_pathing.", file=sys.stderr)
+            # Planes and bounds still have to agree, so this is a narrow retry, not a
+            # fudge: the importer and the client can differ by a trapezoid or two.
+            tolerance = max(8, fp["trapezoids"] // 200)
+            near = match_sheet(sheet, fp, tolerance=tolerance)
+            if near:
+                report["near_matches"] = near
+                print("\nNo exact match; {} blob(s) agree on planes and bounds with a "
+                      "trapezoid delta of at most {} -- treat as a NEAR match and confirm "
+                      "by terrain:".format(len(near), tolerance))
+                for row in near:
+                    print("  file_id {}  traps={} (client {})  size={}".format(
+                        row["file_id"], row["trapezoids"], fp["trapezoids"], row["size"]))
+                print("\nGmMapConfig candidate for map {} (VERIFY by terrain):\n"
+                      "    .map_file_id = {},".format(map_id, near[0]["file_id"]))
+                return 0
+            print("\nNO MATCH in the sheet, not even near. Either the map is not a RIFF map "
+                  "blob, or the sheet was built with a size floor (never filter maps by "
+                  "compressed size). Fall back to --find-floats in gwdat_pathing.",
+                  file=sys.stderr)
             return 4
 
         print("\n{} matching blob(s), a map is stored twice so two is the expected answer:"

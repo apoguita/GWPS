@@ -54,6 +54,27 @@ GmMapConfig s_LakesideCounty = {
     },
 };
 
+// The Northlands, map id 147 -- 2026-10-25, spawn point read from the live client.
+//
+// A NEAR match, not an exact one, and the difference is worth recording. The client
+// standing in the map reports 48 planes, 6889 trapezoids, bounds
+// (-20640,-21504)..(24279,24331). Two blobs agree on the planes and the bounds exactly
+// -- 0x8005EA96 and 0x8001C539, 3 657 363 bytes each -- but GmImportMap reads 6890
+// trapezoids from them, one more than the client holds.
+//
+// So the importer and the client can disagree by a trapezoid. That is a real (small)
+// divergence in our parse, not a reason to distrust the match: planes, bounds and 6889
+// of 6890 trapezoids agree, and no other blob is anywhere near. It still has to be
+// confirmed by terrain -- this config is written on a near match, so the login is the
+// evidence, not this comment.
+GmMapConfig s_TheNorthlands = {
+    .map_id = MapId_TheNorthlands,
+    .map_file_id = 0x8005EA96,     // twin 0x8001C539; the 0x8 prefix is part of the id
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { -11679.181f, -16305.796f, 0 },
+    },
+};
 // The Catacombs, map id 145 -- 2026-10-25, spawn point read from the live client.
 //
 // Unlike Ascalon City and Lakeside County, this map does NOT share blob 0x1B97D: the
@@ -107,6 +128,8 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return &s_LakesideCounty;
     case MapId_TheCatacombs:
         return &s_Catacombs;
+    case MapId_TheNorthlands:
+        return &s_TheNorthlands;
     case MapId_KainengCenterOutpost:
         return &s_KainengCenterOutpost;
     case MapId_LionsArchOutpost:
@@ -121,5 +144,7 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return NULL;
     }
 }
+
+
 
 
