@@ -172,7 +172,11 @@ void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char 
     }
 
     slice_uint16_t text = { .ptr = buffer, .len = len };
+    // The text rides on a Core message; the Server message that follows says which
+    // channel it belongs to. `Channel_Warning` is the on-screen one, which is what a GM
+    // answer should look like -- a Core alone renders nothing on its own.
     GameSrv_SendChatMessageCore(srv, conn, text);
+    GameSrv_SendChatMessageServer(srv, conn, Channel_Warning);
 }
 
 int GameSrv_HandleChatCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg)

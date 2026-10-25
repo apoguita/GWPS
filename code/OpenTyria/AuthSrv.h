@@ -105,6 +105,11 @@ typedef struct GlobalAccountRegistry {
     GmUuid    char_id;
     uint32_t  current_server_id;
     uint32_t  current_player_id;
+    // Set while a transfer is in flight. A transfer makes the OLD game server report the
+    // player as gone (`CtrlMsg_PlayerLeft`), and that report must not wipe the identity
+    // the NEW connection is validated against -- it did, and the client was kicked with
+    // error 007 the moment it reconnected.
+    bool      transferring;
     uintptr_t auth_conn_token;
 } GlobalAccountRegistry;
 
@@ -164,3 +169,4 @@ int  AuthSrv_Bind(AuthSrv *srv, const char *addr, size_t addr_len);
 void AuthSrv_Update(AuthSrv *srv);
 
 void AuthSrv_CompleteGameTransfer(AuthSrv *srv, AuthTransfer transfer, uint32_t server_id, uint16_t map_id);
+

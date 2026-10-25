@@ -388,6 +388,15 @@ void AuthSrv_MarkAccountGameDisconnected(AuthSrv *srv, GmUuid account_id)
 {
     GlobalAccountRegistry *account;
     if ((account = AuthSrv_GetAccount(srv, account_id)) != NULL) {
+        if (account->transferring) {
+            // The player left the OLD server because we moved them. Clearing the identity
+            // here is what broke the transfer: the client's next connection is validated
+            // against these two fields, so wiping them guaranteed a rejection (error 007).
+            log_info("Player left the previous server during a transfer; keeping server %u "
+                     "/ player token %u", account->current_server_id,
+                     account->current_player_id);
+            return;
+        }
         account->current_server_id = 0;
         account->current_player_id = 0;
         if (account->auth_conn_token == 0) {
@@ -789,6 +798,15 @@ int AuthSrv_HandleRequestGameInstance(AuthSrv *srv, AuthConnection *conn, AuthCl
         return ERR_OK;
     }
 
+    if (account->transferring) {
+        // A transfer that never completed would otherwise lock this account out forever:
+        // `current_server_id` stays set, so every fresh login is refused below.
+        log_warn("Clearing a transfer that never completed for this account");
+        account->transferring = false;
+        account->current_server_id = 0;
+        account->current_player_id = 0;
+    }
+
     if (account->current_server_id != 0) {
         // @Cleanup: kick the client from the existing server and allow login.
         log_warn("We should kick the user from the server");
@@ -911,6 +929,13 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     connected->char_id = msg->char_id;
     connected->current_server_id = metadata->server_id;
     connected->current_player_id = player_token;
+    // Until the new connection is accepted, the old server reporting this player as gone
+    // must not clear the identity below (see AuthSrv_MarkAccountGameDisconnected).
+    connected->transferring = true;
+    log_info("Transfer accepted: account identity now server %u / player token %u (map %d, "
+             "ctrl %s)", metadata->server_id, player_token,
+             (int) metadata->district.map_id,
+             metadata->ctrl_conn ? "up" : "pending");
 
     if (metadata->ctrl_conn == 0) {
         AuthTransfer *transfer = array_push(&metadata->pending_transfers, 1);
@@ -1170,10 +1195,22 @@ void AuthSrv_DoPostHandshake(AuthSrv *srv, Connection *conn)
             connected->current_server_id != conn->game_version.map_token ||
             connected->current_player_id != conn->game_version.player_token)
         {
-            log_warn("User connected to game server with unexpected values");
+            log_warn("User connected to game server with unexpected values: char %s "
+                     "(server %u vs %u, player token %u vs %u)",
+                     uuid_equals(&connected->char_id, &char_id) ? "ok" : "MISMATCH",
+                     connected->current_server_id, conn->game_version.map_token,
+                     connected->current_player_id, conn->game_version.player_token);
             Connection_Free(conn);
             stbds_hmdel(srv->objects, conn->token);
             return;
+        }
+
+        // The transfer is complete: this connection is the one the account was moved to,
+        // so the old server's "player left" report is no longer expected.
+        if (connected->transferring) {
+            connected->transferring = false;
+            log_info("Transfer completed: client reconnected to server %u",
+                     connected->current_server_id);
         }
 
         GameSrvMetadata* metadata;
@@ -1594,3 +1631,4 @@ void AuthSrv_Update(AuthSrv *srv)
 
     array_clear(&srv->objects_with_event);
 }
+
