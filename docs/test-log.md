@@ -220,3 +220,79 @@ reports no warning.
 - staged `portal.dll` next to `Gw.custom.exe`
 
 Remaining Phase 0 work is T3 onward: all require launching the patched client.
+
+---
+
+# PHASE 0 CORE — PASS — 2026-10-25 — `a1e8266`
+
+Tester: logged in with `user1@example.com`, created a character, entered the
+world, moved around, and interacted with items. **The stack works end to end.**
+
+## Evidence from the server log
+
+| Step | Evidence | Result |
+|------|----------|--------|
+| T3 handshake | `Accepted Auth connection 0009`; `User login user id: fa520ee2-... session id: d8b9bf5d-...` | PASS |
+| T4 account login | session/account resolved from DB, no DB errors | PASS |
+| T6 char creation | no char-creation failures logged | PASS (tester confirms) |
+| T7 spawn | `Server 2072167476 started...`, `Accepted Ctrl connection`, `GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS`, `_PLAYERS`, `Unhandled ... 10`, `11` | PASS |
+| T8 no-map-fallback | **no** `No config for map ... falling back to default` line | PASS |
+| T10 movement | accepted, but position corrections rejected -- see F7 | PARTIAL |
+| T12 item drop | `TODO: we must still implement this` (`GmInventory.c:276`) | PARTIAL |
+| T9/T11/T13/T14 | not exercised in this session | NOT TESTED |
+
+No crash, no `abort()`, no `Invalid riff type`, no database errors.
+
+## Triage of every unhandled header
+
+Field layouts are from `code/OpenTyria/msgdefs.info`; names from `opcodes.h`.
+
+| Header | Layout | Identification | Class |
+|--------|--------|----------------|-------|
+| Auth `0x23` (35) | `DWORD` | `AUTH_CMSG_0023`; sent once at auth connect | missing-feature (benign) |
+| Game `0x0A` (10) | `BLOB(16) + 6x DWORD` | `GAME_CMSG_0010`; sent once at game connect | missing-feature |
+| Game `0x0B` (11) | `BLOB(16) + 4x DWORD + STR16(16) + STR16(128)` | `GAME_CMSG_0011`; looks like player/account info at game connect | missing-feature |
+| Game `0x3D` (61) | `VECT2, DWORD, VECT2, DWORD` | **position update** -- sits directly before `GAME_CMSG_MOVE_TO_COORD` (`0x003E`) and carries `pos2d, plane, dir2d`. Fires ~2 Hz | **defect, see F7** |
+| Game `0x7E` (126) | `DWORD` | `GAME_CMSG_ITEM_USE` | missing-feature |
+| Auth `0x20`/`0x21` | -- | `AUTH_CMSG_SETTING_UPDATE_CONTENT` / `_SIZE`; UI settings on exit | by-design |
+
+### F7 -- position updates are ignored, which is why corrections get rejected
+
+The client streams its actual position in `0x3D` about twice a second. `GameSrv`
+does not handle it, so the server's `agent->position` only advances from
+`MOVE_TO_COORD` (`0x003E`) destinations and pathing. The two views drift apart,
+and every attempt to correct lands here:
+
+```c
+// GmAgent.c:481-487
+if (msg->plane != agent->position.plane ||
+    MAXIMUM_ALLOWED_CORRECTION < Vec2f_Dist2(agent->position.v2, msg->pos)) {
+    log_warn("Player %u tried to correct the position by more than allowed", player_id);
+    return ERR_OK;
+}
+```
+
+Observed 8 times in a ~60 second session.
+
+- Class: **bug caused by a missing-feature** (`0x3D` unhandled)
+- Action: handle `0x3D` -- update `agent->position` (validated against plane and a
+  distance bound) instead of discarding it. Small, self-contained, and it removes
+  both the log spam and the drift. Recommended as the first post-Phase-0 change.
+
+### F8 -- dropping a partial stack is unimplemented
+
+```c
+// GmInventory.c:274-278
+if (msg->count < item->quantity) {
+    // GmItem *new_item = GameSrv_AllocateItem(srv);
+    log_warn("TODO: we must still implement this");
+```
+
+Dropping fewer than the whole stack is a no-op. Class: missing-feature.
+Action: schedule (Phase 1), not a Phase 0 blocker.
+
+## Verdict
+
+Phase 0 exit criteria 1-3 are met: one client logs in, creates a character, spawns
+in Kamadan, and moves; no unexplained crash. Criteria 4-6 remain: T9/T11/T13/T14
+(two clients, chat, stability, reconnect) have not been exercised yet.
