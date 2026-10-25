@@ -87,23 +87,49 @@ Procedure per map, proven end to end on 148 and 146:
 6. Verify by logging in: `GameSrv_LoadMap` must not warn "No config for map … falling
    back to default", and the terrain must be the right place.
 
-Target set for milestone 1, in dependency order:
+Target set for milestone 1, in dependency order. Every row was read from a live client
+standing in the map (2026-10-25); "verified" means the GWPS server served it and the
+tester confirmed the terrain.
 
-| Map | id | Type | File id |
-|-----|----|------|---------|
-| **Ascalon City (pre-Searing)** | 148 | outpost | **0x1B97D ✅ loads** |
-| **Lakeside County** | 146 | explorable | **0x1B97D ✅ loads (shared blob)** |
-| **The Catacombs** | 145 | explorable | **0x5CEE6** — own blob, config added, not yet loaded |
-| Ashford Abbey | 164 | outpost | _unread_ |
-| Regent Valley (pre-Searing) | 162 | explorable | _unread_ |
-| Green Hills County | 160 | explorable | _unread_ |
-| Wizard's Folly | 161 | explorable | _unread_ |
-| The Northlands | 147 | explorable | _unread_ |
+| Map | id | Type | File id | Status |
+|-----|----|------|---------|--------|
+| **Ascalon City (pre-Searing)** | 148 | outpost | **0x1B97D** | **verified** |
+| **Lakeside County** | 146 | explorable | **0x1B97D** | **verified** |
+| Ashford Abbey | 164 | outpost | 0x1B97D | config, not yet loaded |
+| The Catacombs | 145 | explorable | 0x5CEE6 | config, not yet loaded |
+| Green Hills County | 160 | explorable | 0x5CF29 | config, not yet loaded |
+| The Barradin Estate | 163 | outpost | 0x5CF29 | config, not yet loaded |
+| Wizard's Folly | 161 | explorable | 0x5CEE7 | config, not yet loaded |
+| Foibles Fair | 165 | outpost | 0x5CEE7 | config, not yet loaded |
+| Regent Valley (pre-Searing) | 162 | explorable | 0x5CF2A | config, not yet loaded |
+| Fort Ranik | 166 | outpost | 0x5CF2A | config, not yet loaded |
+| The Northlands | 147 | explorable | 0x8005EA96 | config, **near** match, not yet loaded |
 
-**Sharing is per region, not global.** Ascalon City and Lakeside County share
-`0x1B97D`; The Catacombs does not — it reads 51 planes / 5246 trapezoids and matches
-`0x5CEE6` (twin `0x1C530`). So the value has to be *read* per map; it cannot be
-extrapolated from a neighbour.
+**Pre-Searing ships five region blobs, and an outpost shares one with the explorable it
+opens onto.** That is the structure the census found:
+
+```
+0x1B97D    Ascalon City (148), Lakeside County (146), Ashford Abbey (164)
+0x5CEE6    The Catacombs (145)                                        -- alone
+0x5CF29    Green Hills County (160), The Barradin Estate (163)
+0x5CEE7    Wizard's Folly (161), Foibles Fair (165)
+0x5CF2A    Regent Valley (162), Fort Ranik (166)
+0x8005EA96 The Northlands (147)                                       -- alone
+```
+
+So `map_file_id` identifies the **region**; the map id and spawn point choose the place
+inside it. Two maps sharing a blob is the normal case.
+
+Two details that cost time and should not be relearned:
+
+- **The `0x80000000` bit is part of a file id.** `0x5EA96` does not load; `0x8005EA96`
+  parses. Always probe the id before writing it into a config.
+- **The importer and the client can disagree by a trapezoid.** The Northlands reads 6889
+  in the client and 6890 through `GmImportMap`, with planes and bounds identical. A
+  match like that is written down as *near* and confirmed by terrain, never assumed.
+
+**Exit criteria (met 2026-10-25):** a character can log in, be spawned at a valid spawn
+point, and see terrain in Ascalon City (pre) **and** in Lakeside County.
 
 **Exit criteria (met 2026-10-25):** a character can log in, be spawned at a valid spawn
 point, and see terrain in Ascalon City (pre) **and** in Lakeside County.

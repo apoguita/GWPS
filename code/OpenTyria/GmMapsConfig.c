@@ -75,6 +75,93 @@ GmMapConfig s_TheNorthlands = {
         { -11679.181f, -16305.796f, 0 },
     },
 };
+// ---------------------------------------------------------------------------
+// Pre-Searing, 2026-10-25: every map below was read from a live client standing in
+// it (tools/probe-pathing.py), and its navmesh fingerprint matches the blob's own
+// parse exactly unless noted.
+//
+// The shape that came out of it: pre-Searing ships **five region blobs**, and each is
+// shared by an outpost and the explorable it opens onto --
+//
+//   0x1B97D    Ascalon City (148), Lakeside County (146), Ashford Abbey (164)
+//   0x5CEE6    The Catacombs (145)                  -- alone
+//   0x5CF29    Green Hills County (160), The Barradin Estate (163)
+//   0x5CEE7    Wizard's Folly (161), Foibles Fair (165)
+//   0x5CF2A    Regent Valley (162), Fort Ranik (166)
+//   0x8005EA96 The Northlands (147)                 -- alone, and a near match
+//
+// So map_file_id identifies the *region*, and the map id plus spawn point choose the
+// place inside it. Two maps sharing a blob is the normal case, not a bug.
+// ---------------------------------------------------------------------------
+
+// Green Hills County (160) and The Barradin Estate (163) share this blob; the
+// fingerprint matches it exactly (45 planes, 4772 trapezoids).
+GmMapConfig s_GreenHillsCounty = {
+    .map_id = MapId_GreenHillsCounty,
+    .map_file_id = 0x5CF29,        // twin 0x1BA26
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { -7492.531f, 1454.671f, 0 },
+    },
+};
+
+GmMapConfig s_TheBarradinEstateOutpost = {
+    .map_id = MapId_TheBarradinEstateOutpost,
+    .map_file_id = 0x5CF29,        // twin 0x1BA26
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { -6479.301f, 1795.212f, 0 },
+    },
+};
+
+// Wizard's Folly (161) and Foibles Fair (165): 18 planes, 5241 trapezoids, exact.
+GmMapConfig s_WizardsFolly = {
+    .map_id = MapId_WizardsFolly,
+    .map_file_id = 0x5CEE7,        // twin 0x1BACB
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 633.f, 7270.f, 0 },
+    },
+};
+
+GmMapConfig s_FoiblesFairOutpost = {
+    .map_id = MapId_FoiblesFairOutpost,
+    .map_file_id = 0x5CEE7,        // twin 0x1BACB
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 12.172f, 9910.412f, 0 },
+    },
+};
+
+// Regent Valley (162) and Fort Ranik (166): 24 planes, 5267 trapezoids, exact.
+GmMapConfig s_RegentValleyPreSearing = {
+    .map_id = MapId_RegentValleyPreSearing,
+    .map_file_id = 0x5CF2A,        // twin 0x1BB1D
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 22614.f, 6849.f, 0 },
+    },
+};
+
+GmMapConfig s_FortRanikPreSearingOutpost = {
+    .map_id = MapId_FortRanikPreSearingOutpost,
+    .map_file_id = 0x5CF2A,        // twin 0x1BB1D
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 22697.885f, 10275.67f, 0 },
+    },
+};
+
+// Ashford Abbey (164) is on the Ascalon City / Lakeside blob -- same 58 planes and
+// 6120 trapezoids -- which makes 0x1B97D a three-map region.
+GmMapConfig s_AshfordAbbeyOutpost = {
+    .map_id = MapId_AshfordAbbeyOutpost,
+    .map_file_id = 0x1B97D,        // twin 0x5E9E4
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { -12078.813f, -8452.183f, 0 },
+    },
+};
 // The Catacombs, map id 145 -- 2026-10-25, spawn point read from the live client.
 //
 // Unlike Ascalon City and Lakeside County, this map does NOT share blob 0x1B97D: the
@@ -130,6 +217,20 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return &s_Catacombs;
     case MapId_TheNorthlands:
         return &s_TheNorthlands;
+    case MapId_GreenHillsCounty:
+        return &s_GreenHillsCounty;
+    case MapId_TheBarradinEstateOutpost:
+        return &s_TheBarradinEstateOutpost;
+    case MapId_WizardsFolly:
+        return &s_WizardsFolly;
+    case MapId_FoiblesFairOutpost:
+        return &s_FoiblesFairOutpost;
+    case MapId_RegentValleyPreSearing:
+        return &s_RegentValleyPreSearing;
+    case MapId_FortRanikPreSearingOutpost:
+        return &s_FortRanikPreSearingOutpost;
+    case MapId_AshfordAbbeyOutpost:
+        return &s_AshfordAbbeyOutpost;
     case MapId_KainengCenterOutpost:
         return &s_KainengCenterOutpost;
     case MapId_LionsArchOutpost:
@@ -144,6 +245,7 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return NULL;
     }
 }
+
 
 
 

@@ -629,3 +629,40 @@ Consequences this establishes:
    `0x1B97D` with a spawn point read from the live client, and look at the terrain.
 3. Milestone 1's exit criteria -- a character logs in, spawns at a valid point, and sees
    terrain in **Ascalon City (pre) and Lakeside County** -- are **met**.
+
+---
+
+## Pre-Searing census -- all eleven maps read from the live client -- 2026-10-25
+
+The tester walked pre-Searing on the live client and ran `tools/probe-pathing.py` in
+every map (plus the three outposts that were missing from the original eight). Each row
+below is a read from the client's own pathing records; `exact` means the blob's
+`GmImportMap` fingerprint matches it in planes, trapezoid count and bounds.
+
+| Map | id | planes/traps | Blob (twin) | Match |
+|-----|----|--------------|-------------|-------|
+| Ascalon City (pre) | 148 | 58 / 6120 | 0x1B97D (0x5E9E4) | exact |
+| Lakeside County | 146 | 58 / 6120 | 0x1B97D (0x5E9E4) | exact |
+| Ashford Abbey | 164 | 58 / 6120 | 0x1B97D (0x5E9E4) | exact |
+| The Catacombs | 145 | 51 / 5246 | 0x5CEE6 (0x1C530) | exact |
+| Green Hills County | 160 | 45 / 4772 | 0x5CF29 (0x1BA26) | exact |
+| The Barradin Estate | 163 | 45 / 4772 | 0x5CF29 (0x1BA26) | exact |
+| Wizard's Folly | 161 | 18 / 5241 | 0x5CEE7 (0x1BACB) | exact |
+| Foibles Fair | 165 | 18 / 5241 | 0x5CEE7 (0x1BACB) | exact |
+| Regent Valley (pre) | 162 | 24 / 5267 | 0x5CF2A (0x1BB1D) | exact |
+| Fort Ranik | 166 | 24 / 5267 | 0x5CF2A (0x1BB1D) | exact |
+| The Northlands | 147 | 48 / 6889 | 0x8005EA96 (0x8001C539) | **near** (6890) |
+
+**The structure this reveals: five region blobs, each shared by an outpost and the
+explorable it opens onto.** Ashford Abbey joins Ascalon City and Lakeside County on
+0x1B97D; Barradin Estate shares with Green Hills; Foibles Fair with Wizard's Folly;
+Fort Ranik with Regent Valley. The Catacombs and The Northlands are alone.
+
+That is why the earlier "identical fingerprint" alarm was a false one: two maps sharing
+a blob is the design, not a stale read. It also means `map_file_id` identifies a
+*region*, and the map id plus spawn point choose the place inside it.
+
+All eleven spawn points were captured with their plane (0 in every case). Configs are in
+`GmMapsConfig.c` for all of them, including the three outposts that were not in the
+original eight-map list; only Ascalon City and Lakeside County have been loaded on the
+GWPS server so far.
