@@ -79,17 +79,84 @@ class AreaInfoStruct(Structure):
     def file_id2(self) -> int: return ((self.file_id - 1) // 0xff00) + 0x100
 ```
 
-### The one open question
+### Verified against a live client (2026-10-24)
 
-`AreaInfo.file_id` is a **packed** value that expands to two .dat file ids via
-`file_id1()` / `file_id2()`. OpenTyria's `GmMapConfig.map_file_id` is a single
-`uint32_t` fed straight into `FaGetFile` (`GameSrv.c:2030`). We do not yet know
-which of the three (`file_id`, `file_id1()`, `file_id2()`) it corresponds to.
+Read from `Gw.exe` (pid 16012, `F:\GW\GW1\Gw.exe`) via Py4GW_Stealth read-only
+attach. Tools: `tools/dump-map-table.py`, `tools/gwdat-mft.py`.
 
-**This is a five-minute check, not a research project:** Kamadan's
-`GmMapConfig.map_file_id` is `0x345CC`, so read `AreaInfo[MapId_KamadanJewelOfIstanOutpost].file_id`
-in a live client and compare against `0x345CC`, `file_id1()` and `file_id2()`.
-Whichever matches is the rule for all ~880 maps.
+**Confirmed — the array and its layout:**
+
+- `map.area_info_addr` resolves to a stable base (`0xE7CF00` on this build) and
+  the stride is `0x7C`, exactly as `sizeof(AreaInfo)` says.
+- Independent cross-check: `base + 5 * 0x7C = 0xE7D16C`, and
+  `InstanceInfo.current_map_info_ptr` was `0xE7D16C` while the client sat in map
+  id 5. Byte-exact. The array *is* indexed by map id.
+- `region`, `type`, `campaign` are valid for every entry, and they are correct:
+  map 148 (Ascalon City pre) reads `type=10` (`RegionType_Outpost`), maps 145/146
+  (Catacombs, Lakeside) read `type=2` (`RegionType_Explorable`).
+
+**Confirmed — `AreaInfo.file_id` is the same quantity as `GmMapConfig.map_file_id`:**
+
+Kamadan's `0x345CC` decomposes under the client's own formula into
+`file_id1 = 0x49CB`, `file_id2 = 0x103` — the same packing the live client uses.
+Same field, same units.
+
+**Not confirmed — `file_id` is populated lazily, not stored statically.**
+This is the important gotcha. 740 of 899 entries read `file_id == 0`. The 159 that
+are populated cluster into bands:
+
+| `file_id2` | count | examples |
+|-----------|-------|----------|
+| 0x100 | 9 | Hall of Heroes, Battle Isles arenas |
+| 0x101 | 30 | Guild Halls, Warrior's/Hunter's/Wizard's Isle |
+| 0x102 | 73 | D'Alessio Arena, Fort Koga, Amnoon Arena |
+| 0x103 | 25 | Churranu Island Arena, Guild Halls, Fetid River |
+| 0x104 | 15 | Dwayna Vs Grenth, Rollerbeetle Racing |
+| 0x105 | 5 | Costume Brawl, Whitefury Rapids |
+
+None of the six `GmMapConfig` maps was populated (the client was idling in a Guild
+Hall, not in Lion's Arch / Kamadan / etc.). **So you cannot dump the whole
+map→file-id table in one shot from an idle client** — the values appear once the
+client has actually loaded the map.
+
+Two ways forward, and they are complementary:
+
+1. **Parse `Gw.dat` directly** (`tools/gwdat-mft.py`) — no client needed, gives
+   every archive file id at once, and validates against the six known configs.
+   *Blocked while the client runs:* `Gw.exe` holds an exclusive lock on `Gw.dat`
+   (`ERROR_SHARING_VIOLATION` even with `FILE_SHARE_READ|WRITE`). Close the client
+   first.
+2. **Travel to the map and re-read.** Works today, needs one visit per map. Make
+   `dump-map-table.py` merge into a JSON DB across runs so repeated visits
+   accumulate instead of overwriting.
+
+### The Pre-Searing map census (verified)
+
+Filtering all 899 entries for `region == Presearing` yields **21 maps**, including
+four that were missing from the hand-written list in `03-roadmap.md`:
+
+| id | type | name |
+|----|------|------|
+| 143 | outpost | *(no name id resolved — name_id 10454)* |
+| 145 | explorable | The Catacombs |
+| 146 | explorable | Lakeside County |
+| 147 | explorable | The Northlands |
+| 148 | outpost | Ascalon City (pre-Searing) |
+| 149 | town | Ascalon Academy |
+| 150 | town | Ascalon Academy PvP battle |
+| 151 | explorable | Ascalon Academy |
+| 160 | explorable | Green Hills County |
+| 161 | explorable | Wizard's Folly |
+| 162 | explorable | Regent Valley (pre-Searing) |
+| **163** | outpost | **Pre-Searing: The Barradin Estate** |
+| 164 | outpost | Pre-Searing: Ashford Abbey |
+| **165** | outpost | **Pre-Searing: Foibles Fair** |
+| 166 | outpost | Pre-Searing: Fort Ranik |
+| 408–412 | explorable | *(5 entries, name ids 31414–31422)* |
+| 779 | outpost | *(no name id resolved — name_id 79766)* |
+
+149/150/151 are the Ascalon Academy mission chain, which `03-roadmap.md` lists as
+out of scope. 408–412 and 779 need identifying before they join the target set.
 
 ### What is still missing
 

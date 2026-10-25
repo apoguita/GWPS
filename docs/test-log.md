@@ -72,3 +72,41 @@ All blocked on the same two prerequisites. See `04-scope.md` → "Prerequisites"
 | F# | Step | Symptom | Class | Action |
 |----|------|---------|-------|--------|
 | —  | —    | none yet | — | — |
+
+---
+
+## Tooling probe — AreaInfo / map_file_id — PARTIAL — 2026-10-24 — `90d03b2`
+
+Command (elevated, Stealth read-only attach to `Gw.exe` pid 16012):
+```powershell
+python tools/dump-map-table.py --json build/map-table.json
+python tools/gwdat-mft.py F:\GW\GW1\Gw.dat
+```
+
+Observed:
+- `map.area_info_addr` resolves; base `0xE7CF00`, stride `0x7C`.
+- Cross-check passes exactly: `base + 5*0x7C = 0xE7D16C` ==
+  `InstanceInfo.current_map_info_ptr` while the client sat in map id 5.
+- `region`/`type` fields are correct for every entry.
+- **21 maps** have `region == Presearing` (census recorded in
+  `06-client-tooling.md`); four were missing from the hand-written roadmap list
+  (163 Barradin Estate, 165 Foibles Fair, 143, 779).
+- `AreaInfo.file_id` is the same quantity as `GmMapConfig.map_file_id`: Kamadan's
+  `0x345CC` decomposes to `file_id1=0x49CB / file_id2=0x103` under the client's
+  own formula.
+- **`file_id` is lazily populated.** 740/899 entries read 0; the 159 populated
+  ones sit in bands `file_id2` 0x100-0x105. None of the six configured maps was
+  populated while the client idled in a Guild Hall.
+- `tools/gwdat-mft.py` could NOT run: `Gw.exe` holds an exclusive lock on
+  `Gw.dat` (sharing violation even with `FILE_SHARE_READ|FILE_SHARE_WRITE`).
+
+Findings:
+- F1 — `MapMethods.GetMapInfo(map_id)` returns `None` for most ids on this build
+  (Lion's Arch, Kamadan, all Pre-Searing) even though the underlying read of the
+  same address succeeds. Class: bug (upstream tooling). Action: `dump-map-table.py`
+  now reads the array directly instead; worth a note upstream.
+- F2 — `Gw.dat` cannot be parsed while the client is running. Class: by-design.
+  Action: close the client, then run `tools/gwdat-mft.py`.
+
+Next: close the client and parse `Gw.dat` to get every archive file id in one
+pass, or travel to each map and let the dump merge.
