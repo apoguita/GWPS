@@ -1265,22 +1265,41 @@ void GameSrvCtrl_HandleTransferConnection(GameSrv *srv, CtrlMsg_TransferConnecti
 
 void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlayerTransfer *msg)
 {
-    GmPlayer *player;
-    if ((player = GameSrv_GetPlayer(srv, msg->player_id)) == NULL) {
+    // Two ways to find the connection, in this order:
+    //   1. through the player, if it is still here;
+    //   2. through the record kept when the transfer started, because a client that
+    //      leaves the map disconnects first and the player is gone by the time this
+    //      arrives. That case used to drop the redirect and hang the client's load.
+    GameConnection *conn = NULL;
+    GmPlayer *player = GameSrv_GetPlayer(srv, msg->player_id);
+    if (player != NULL) {
+        if (!uuid_equals(&player->char_id, &msg->char_id)) {
+            log_error("Received 'CompletePlayerTransfer', but player char id doesn't match expected char id");
+            return;
+        }
+        conn = GameSrv_GetConnection(srv, player->conn_token);
+        if (conn == NULL) {
+            log_error("Received 'CompletePlayerTransfer', but the player doesn't have a connection anymore");
+        }
+    } else if (srv->transfer_pending &&
+               srv->transfer_player_id == msg->player_id &&
+               uuid_equals(&srv->transfer_char_id, &msg->char_id)) {
+        conn = GameSrv_GetConnection(srv, srv->transfer_conn_token);
+        log_info("Player left before the transfer completed; using the connection recorded "
+                 "at transfer start (%s)", conn ? "found" : "gone too");
+    } else {
         log_warn("Received 'CompletePlayerTransfer', but player isn't on the server anymore");
         return;
     }
 
-    if (!uuid_equals(&player->char_id, &msg->char_id)) {
-        log_error("Received 'CompletePlayerTransfer', but player char id doesn't match expected char id");
+    if (conn == NULL) {
+        log_error("Cannot send TRANSFER_GAME_SERVER_INFO: no connection for player %u",
+                  msg->player_id);
+        srv->transfer_pending = false;
         return;
     }
 
-    GameConnection *conn;
-    if ((conn = GameSrv_GetConnection(srv, player->conn_token)) == NULL) {
-        log_error("Received 'CompletePlayerTransfer', but the player doesn't have a connection anymore");
-        return;
-    }
+    srv->transfer_pending = false;
 
     GameSrvMsg *buffer = GameSrv_BuildMsg(srv, GAME_SMSG_TRANSFER_GAME_SERVER_INFO);
     GameSrv_TransferGameServerInfo *msg2 = &buffer->transfer_game_server_info;
@@ -1325,8 +1344,16 @@ void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistric
         return;
     }
 
-    log_info("Asked the auth server for a game server on map %d (district %u)",
-             (int) district.map_id, district.district_number);
+    // Remember where the redirect has to go: the client disconnects from this server as
+    // part of the move, so by the time the completion arrives the player may be gone.
+    srv->transfer_conn_token = player->conn_token;
+    srv->transfer_player_id = player->player_id;
+    srv->transfer_char_id = player->char_id;
+    srv->transfer_pending = true;
+
+    log_info("Asked the auth server for a game server on map %d (district %u); redirect "
+             "will use connection %04" PRIXPTR, (int) district.map_id,
+             district.district_number, player->conn_token);
 }
 
 void GameSrvCtrl_StartPlayerTransfer(GameSrv *srv, GmPlayer *player)

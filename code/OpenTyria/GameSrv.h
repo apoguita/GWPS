@@ -51,6 +51,14 @@ typedef struct GameSrv {
     Thread                   thread;
     uint32_t                 server_id;
     GmDistrict               district;
+    // The connection a transfer was started for, remembered because the client can
+    // disconnect (leaving the map) *before* the auth server's completion arrives. Without
+    // this the old server could no longer find the player and never sent
+    // TRANSFER_GAME_SERVER_INFO -- the client hung on the loading screen.
+    uintptr_t                transfer_conn_token;
+    uint32_t                 transfer_player_id;
+    GmUuid                   transfer_char_id;
+    bool                     transfer_pending;
     GmMapConfig             *map_static_config;
     Iocp                     iocp;
     Database                 database;
