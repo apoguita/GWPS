@@ -1336,6 +1336,7 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     log_info("Sent TRANSFER_GAME_SERVER_INFO: map %d, server %u, player token %u -> "
              "connection %04" PRIXPTR " (err %d)", (int) msg->map_id, msg->map_token,
              msg->player_token, conn->token, send_err);
+}
 
 void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistrict district)
 {
