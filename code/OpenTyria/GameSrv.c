@@ -220,6 +220,35 @@ int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t siz
     return ERR_OK;
 }
 
+// Send an exact byte string, encrypted and queued like any other message.
+//
+// This exists for the one case where the client wants a shape the format table does not
+// describe: GAME_SMSG_MAP_UPDATE_CURRENT after a redirect is 12 bytes on the wire, but the
+// shorter form is what this client accepts during the login batch, and the table only
+// holds one row per header. Rather than change the shape that login depends on, the
+// redirect path writes its bytes out here.
+int GameConnection_SendRaw(GameConnection *conn, const void *data, size_t size)
+{
+    uint8_t *dst;
+    if ((dst = array_push(&conn->outgoing, size)) == NULL) {
+        return ERR_OUT_OF_MEMORY;
+    }
+    memcpy(dst, data, size);
+
+    if (GameSrv_TraceMessages()) {
+        char hex[3 * 24 + 1];
+        size_t n_show = size < 24 ? size : 24;
+        for (size_t idx = 0; idx < n_show; ++idx) {
+            snprintf(&hex[idx * 3], 4, "%02X ", dst[idx]);
+        }
+        hex[n_show * 3] = '\0';
+        log_info("SEND  raw %3zu bytes -> conn %04" PRIXPTR " : %s", size, conn->token, hex);
+    }
+
+    arc4_crypt_inplace(&conn->cipher_enc, dst, size);
+    return ERR_OK;
+}
+
 void GameSrv_BroadcastMessage(GameSrv *srv, GameSrvMsg *msg, size_t size)
 {
     size_t n_connections = stbds_hmlen(srv->connections);
@@ -1381,6 +1410,21 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     log_info("Sent TRANSFER_GAME_SERVER_INFO: map %d, server %u, player token %u -> "
              "connection %04" PRIXPTR " (err %d)", (int) msg->map_id, msg->map_token,
              msg->player_token, conn->token, send_err);
+
+    // The redirect alone is not enough: a live server follows 0x01A6 with 0x0099 carrying
+    // the map the client is being sent to, in the same millisecond (captured: 422 then 153
+    // with map 165), and only then does the client start loading the new instance. Without
+    // it our client drops the connection and reports 005 instead of reconnecting.
+    //
+    // The wire form is 12 bytes -- header, a zero WORD, the map id, a zero DWORD -- exactly
+    // as captured. It is written out here rather than through the format table because the
+    // login batch keeps the shorter 0x0099 that this client accepts there.
+    uint8_t update[12];
+    memset(update, 0, sizeof(update));
+    le16enc(&update[0], GAME_SMSG_MAP_UPDATE_CURRENT);
+    le32enc(&update[4], msg->map_id);
+    GameConnection_SendRaw(conn, update, sizeof(update));
+    log_info("Sent MAP_UPDATE_CURRENT for the destination: map %d", (int) msg->map_id);
 }
 
 void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistrict district)
