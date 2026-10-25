@@ -102,22 +102,27 @@ def main(args):
     # length and section offset intact. A lookup that now fails is the intended outcome.
     # If the client turns out to need one of these -- the file server is the one to watch,
     # since it exists to stream missing Gw.dat content -- delete it from this list.
+    # OFF unless --detach is passed. Attempted 2026-10-25 and it does not work: repointing
+    # every one of these broke login with the client's own "Guild Wars is unable to connect
+    # to the ArenaNet network", and restoring File1 alone did not fix it. This client
+    # requires the real endpoints at startup, so it cannot be detached by hostname patching.
+    #
+    # What the experiment established, which is worth keeping:
+    #   - the socket a working client holds is 54.196.189.234, which is in
+    #     File1.ArenaNetworks.com's A record set -- i.e. the content/file server, not auth;
+    #     `-authsrv 127.0.0.1` genuinely redirects the auth handshake.
+    #   - File1 exists to stream Gw.dat content. Truly detaching means serving that ourselves:
+    #     GameSrv_SendManifest exists but is never called with real data, and the manifest we
+    #     send says "done" with nothing behind it.
     HOSTS = (
         b'Auth1.ArenaNetworks.com',
-        # File1.ArenaNetworks.com is deliberately NOT repointed: it is the content/file
-        # server, and the client needs it reachable or login fails outright with "Guild Wars
-        # is unable to connect to the ArenaNet network". Identified by IP on 2026-10-25 --
-        # the socket the patched client held was 54.196.189.234, which is in File1's A
-        # record set, while Auth1 resolves elsewhere and is genuinely overridden by
-        # `-authsrv 127.0.0.1`. This is the one remaining tether: the client pulls Gw.dat
-        # content from it, so fully detaching means serving those files ourselves.
-        # b'File1.ArenaNetworks.com',
+        b'File1.ArenaNetworks.com',
         b'Diag.ArenaNetworks.com',
         b'bug.arenanetworks.com:6112',
         b'icmp.arenanetworks.com',
         b'ArenaNetworks.com',
         b'account.arena.net',
-    )
+    ) if getattr(args, 'detach', False) else ()
     REPLACEMENT = b'127.0.0.1'
 
     def is_host_char(b):
@@ -165,6 +170,10 @@ if __name__ == '__main__':
     parser.add_argument('input')
     parser.add_argument('keys_file')
     parser.add_argument('--output', metavar='output', type=str, help='The output file', required=False)
+    parser.add_argument('--detach', action='store_true',
+                        help='Also repoint the baked-in ArenaNet hostnames at 127.0.0.1. '
+                             'Known to break login: this client needs the real endpoints '
+                             'at startup. Kept for the experiment, not for normal builds.')
 
     args = parser.parse_args()
     main(args)
