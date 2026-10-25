@@ -83,6 +83,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--dump-trapezoids", default=None, metavar="PATH",
                         help="write every trapezoid as CSV (for containment matching)")
     parser.add_argument("--pid", type=int, default=None)
+    parser.add_argument("--list", action="store_true",
+                        help="list candidate clients (pid, name, path) and exit")
     args = parser.parse_args(argv)
 
     root = Path(args.py4gw_root)
@@ -98,6 +100,20 @@ def main(argv: list[str]) -> int:
     from py4gw.win32 import Win32
 
     win32 = Win32()
+
+    if args.list:
+        # No elevation needed to enumerate: this is a process listing.
+        candidates = find_clients(win32, None)
+        if not candidates:
+            print("no Gw*.exe process found")
+            return 0
+        print(f"{'pid':>8}  {'name':<16}  path")
+        for entry in candidates:
+            print(f"{int(entry['pid']):>8}  {str(entry.get('name') or '?'):<16}  "
+                  f"{entry.get('path') or '?'}")
+        print("\nprobe one with:  --pid <pid>")
+        return 0
+
     if not win32.is_elevated():
         print("this needs an elevated shell: py4gw.connect() is a write.", file=sys.stderr)
         print("start PowerShell as administrator (approve the UAC prompt) and run it again.",
