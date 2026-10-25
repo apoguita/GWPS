@@ -1309,7 +1309,7 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     GameConnection_SendMessage(conn, buffer, sizeof(*msg2));
 }
 
-void GameSrvCtrl_StartPlayerTransfer(GameSrv *srv, GmPlayer *player)
+void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistrict district)
 {
     int err;
 
@@ -1317,14 +1317,23 @@ void GameSrvCtrl_StartPlayerTransfer(GameSrv *srv, GmPlayer *player)
     msg.StartPlayerTransfer.player_id = player->player_id;
     msg.StartPlayerTransfer.account_id = player->account_id;
     msg.StartPlayerTransfer.char_id = player->char_id;
-    msg.StartPlayerTransfer.district = srv->district;
-    msg.StartPlayerTransfer.district.map_type = MapType_MainTown;
+    msg.StartPlayerTransfer.district = district;
 
     if ((err = CtrlConn_WriteMessage(&srv->ctrl_conn, &msg, sizeof(msg.StartPlayerTransfer))) != 0) {
         // @Cleanup: Figure out what to do here. Probably just kick the player.
         log_error("Couldn't request a player transfer");
         return;
     }
+
+    log_info("Asked the auth server for a game server on map %d (district %u)",
+             (int) district.map_id, district.district_number);
+}
+
+void GameSrvCtrl_StartPlayerTransfer(GameSrv *srv, GmPlayer *player)
+{
+    GmDistrict district = srv->district;
+    district.map_type = MapType_MainTown;
+    GameSrvCtrl_StartPlayerTransferTo(srv, player, district);
 }
 
 void GameSrv_ProcessCtrlEvent(GameSrv *srv, Event event)

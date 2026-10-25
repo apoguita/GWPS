@@ -142,8 +142,18 @@ void GameSrv_SendInvalidCommand(GameSrv *srv, uint16_t player_id)
     array_clear(builder);
 }
 
+// GmCommands.c is included later in the single translation unit; its GM command
+// dispatcher is declared here so chat can consult it first.
+static bool GameSrv_TryHandleGmCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg);
+
 int GameSrv_HandleChatCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg)
 {
+    // GM commands first: /tp, /teleport, /maps. They are ours, and they must not fall
+    // through to the "invalid command" reply below.
+    if (GameSrv_TryHandleGmCommand(srv, player_id, msg)) {
+        return ERR_OK;
+    }
+
     if (slice_u16_equals_ascii_lit(msg, "stuck", sizeof("stuck") - 1)) {
         GmAgent *agent;
         if ((agent = GameSrv_GetAgentByPlayerId(srv, player_id)) != NULL) {

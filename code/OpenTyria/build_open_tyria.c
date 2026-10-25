@@ -158,6 +158,7 @@
 #include "GmInventory.c"
 #include "GmItem.c"
 #include "GmMapsConfig.c"
+#include "GmCommands.c"
 #include "GmMapDataImport.c"
 #include "GmParty.c"
 #include "GmPathHeap.c"
@@ -188,3 +189,4 @@
 #include "tests.c"
 
 #endif
+
