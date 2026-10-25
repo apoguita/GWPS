@@ -640,25 +640,30 @@ typedef struct GameSrv_ChatMessageServer {
     uint32_t channel;
 } GameSrv_ChatMessageServer;
 
-// Corrected 2026-10-25 against the client's GameSrvTransfer
-// (Py4GW_Reforged_Native/include/GW/common/stoc.h:820-831): every field after host is a
-// uint32 there, even the ones the client only partially uses ("region; // uint8_t").
-// We had int8 region + uint16 map_id + uint8 is_explorable, so the client read region,
-// map_id and the player token from the wrong offsets -- the redirect arrived and was
-// unusable, which is why a teleport that "worked" left the client on a loading screen.
-// Matches a live server's message exactly (captured 2026-10-25, 52 bytes on the wire):
-//   a6 01 00 00 | host[24] | token1 | region | map_id | is_explorable | token2 | 0
-// The header is 4 bytes on the wire and 2 here (TYPE_MSG_HEADER_GAME), and host is a
-// sockaddr_in: family, big-endian port, address.
+// 46 bytes on the wire, and the shape that actually gets a client to reconnect:
+//   a6 01 | host[24] | token1 | region | player_token | is_explorable | map_id
+//
+// This looks wrong next to a live capture, which carries map_id in the fifth slot in a
+// 52-byte message. It is not wrong for the client under test. The server log settles it:
+// with this shape the client reconnected to the new map four times (06:15 and 06:35, maps
+// 148, 164, 163 -- "Transfer completed: client reconnected to server ..."), and with the
+// 52-byte shape reordered to match the capture it stops dead: 007 first, then 005 once
+// is_explorable was corrected, and never a connection.
+//
+// The client had already said which order it wants: 'unexpected values: char ok (server
+// same, player token 2795880831 vs 148)'. It reads the fifth dword as the player token, so
+// putting the map id there is exactly what broke it. The capture came from a different
+// client build; the one being tested outranks it.
+//
+// host is a sockaddr_in: family, big-endian port, address.
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
     uint8_t  host[24];
     uint32_t map_token;      // token1: the world/server id
     uint32_t region;
-    uint32_t map_id;
-    uint32_t is_explorable;
     uint32_t player_token;   // token2
-    uint32_t unk;            // present in every captured instance, always 0
+    uint32_t is_explorable;
+    uint32_t map_id;
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {

@@ -4662,15 +4662,14 @@ MsgField GAME_SMSG_0421[14] = {
     {TYPE_BLOB, 8},
 };
 
-MsgField GAME_SMSG_0422[8] = {
-    {TYPE_MSG_HEADER_GAME, 422},
-    {TYPE_BLOB, 24},
+MsgField GAME_SMSG_0422[7] = {
+    {TYPE_MSG_HEADER, 422},
+    {TYPE_BLOB, 24},   // host, a sockaddr_in
     {TYPE_DWORD, 0},   // token1 (world/server id)
     {TYPE_DWORD, 0},   // region
-    {TYPE_DWORD, 0},   // map id
+    {TYPE_DWORD, 0},   // player token
     {TYPE_DWORD, 0},   // is_explorable
-    {TYPE_DWORD, 0},   // token2 (player token)
-    {TYPE_DWORD, 0},   // always 0 in every captured instance
+    {TYPE_DWORD, 0},   // map id
 };
 
 MsgField GAME_SMSG_0423[10] = {
@@ -5810,7 +5809,7 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {419, 7,  GAME_SMSG_0419, 20},
     {420, 4,  GAME_SMSG_0420, 499},
     {421, 14, GAME_SMSG_0421, 83},
-    {422, 8,  GAME_SMSG_0422, 50},
+    {422, 7,  GAME_SMSG_0422, 46},
     {423, 10, GAME_SMSG_0423, 514},
     {424, 2,  GAME_SMSG_0424, 3},
     {425, 3,  GAME_SMSG_0425, 7},
