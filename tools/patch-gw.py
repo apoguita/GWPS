@@ -104,7 +104,14 @@ def main(args):
     # since it exists to stream missing Gw.dat content -- delete it from this list.
     HOSTS = (
         b'Auth1.ArenaNetworks.com',
-        b'File1.ArenaNetworks.com',
+        # File1.ArenaNetworks.com is deliberately NOT repointed: it is the content/file
+        # server, and the client needs it reachable or login fails outright with "Guild Wars
+        # is unable to connect to the ArenaNet network". Identified by IP on 2026-10-25 --
+        # the socket the patched client held was 54.196.189.234, which is in File1's A
+        # record set, while Auth1 resolves elsewhere and is genuinely overridden by
+        # `-authsrv 127.0.0.1`. This is the one remaining tether: the client pulls Gw.dat
+        # content from it, so fully detaching means serving those files ourselves.
+        # b'File1.ArenaNetworks.com',
         b'Diag.ArenaNetworks.com',
         b'bug.arenanetworks.com:6112',
         b'icmp.arenanetworks.com',
