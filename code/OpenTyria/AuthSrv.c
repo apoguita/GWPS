@@ -914,9 +914,17 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
     // refused here, which also makes the alternation impossible.
     if (connected->current_server_id != 0 && conn->server_id != 0 &&
         conn->server_id != connected->current_server_id) {
-        log_warn("Ignoring a transfer request from server %u: the account is on server %u "
-                 "(stale request)", conn->server_id, connected->current_server_id);
-        return ERR_OK;
+        // Not necessarily a stale request -- usually the opposite. A transfer that never
+        // completed leaves the registry pointing at the server the client never reached,
+        // while the client keeps playing on the old one. Refusing here then blocks every
+        // future teleport forever (observed 2026-10-25: registry said 1247356963, the
+        // player was on 3898186703 and every /tp after that was 'ignored as stale').
+        // The requester is the server actually hosting the player, so trust it and resync.
+        log_warn("Resyncing the account to server %u (registry said %u): the last transfer "
+                 "never completed, so the registry was stale",
+                 conn->server_id, connected->current_server_id);
+        connected->current_server_id = conn->server_id;
+        connected->transferring = false;
     }
 
     // While a transfer is in flight to one map, a request for a different map is refused
