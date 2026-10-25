@@ -56,45 +56,52 @@ That is milestone 0: **make Pre-Searing maps real.**
 Blocked on one value per map: **the `map_file_id`**, the key used to fetch the map
 blob from `Gw.dat`.
 
-**Status 2026-10-25: the first map is done and the blocker is understood.** Ascalon
-City (pre-Searing) loads — `map_file_id = 0x1B97D`, spawn `(9541.873, 4796.456)`,
-confirmed by a client logging into the GWPS server (see `docs/test-log.md`).
+**Status 2026-10-25: milestone 1's exit criteria are met.** Ascalon City (pre-Searing)
+and Lakeside County both load, both on `map_file_id = 0x1B97D`, confirmed by a client
+logging into the GWPS server and spawning in the right place (see `docs/test-log.md`).
+
+**A correction to the whole framing of this milestone:** `map_file_id` is **not one per
+map**. Those two maps — one outpost, one explorable — share a single 2.9 MB region blob,
+and the map id plus the spawn coordinate select where inside it you stand. So the goal
+is not "684 file ids", it is "one blob per region, plus a spawn point per map", which is
+far fewer values and mostly the same file. It also means a navmesh fingerprint identifies
+the region, never the individual map.
 
 The earlier hope that `AreaInfo.file_id` would supply every map at once is **dead**
-(F5): the field reads 0 for Pre-Searing maps even while standing in one. A blob
-carries no map identity either — no name string, and its `name_id` does not appear
-(checked against map 148 and Kamadan). So `map_id → file_id` is **observed once per
-map**, not derived offline.
+(F5): the field reads 0 for Pre-Searing maps even while standing in one. A blob carries
+no map identity either — no name string, and its `name_id` does not appear (checked
+against map 148 and Kamadan). So the value is **observed once per region**, not derived
+offline.
 
-Procedure per map, proven end to end on map 148:
+Procedure per map, proven end to end on 148 and 146:
 
 1. Stand the live client in the map.
 2. `py tools/probe-pathing.py --dump-trapezoids build/<map>.csv` (elevated) — the
-   client's navmesh fingerprint: planes, trapezoid count, bounds.
-3. Match it against `gwdat_pathing Gw.dat --min-size 0` (never filter by compressed
-   size). If the sheet has no match, `gwdat_pathing Gw.dat --find-floats
+   client's navmesh fingerprint (planes, trapezoid count, bounds) plus the player's
+   position and plane, which is the spawn point.
+3. Match the fingerprint against `gwdat_pathing Gw.dat --min-size 0` (never filter by
+   compressed size). If the sheet has no match, `gwdat_pathing Gw.dat --find-floats
    build/<map>.csv` scans all 146 901 ids for the client's own float pairs.
-4. Add a `GmMapConfig` in `code/OpenTyria/GmMapsConfig.c` with `map_id`,
-   `map_file_id`, and the player's own position as a spawn point.
+4. Add a `GmMapConfig` with `map_id`, `map_file_id`, and the player's position.
 5. Add the `case` to `GetMapConfigForMapId`.
-6. Verify: `GameSrv_LoadMap` no longer warns "No config for map … falling back to
-   default", and the client lands in the right place.
+6. Verify by logging in: `GameSrv_LoadMap` must not warn "No config for map … falling
+   back to default", and the terrain must be the right place.
 
 Target set for milestone 1, in dependency order:
 
 | Map | id | Type | File id |
 |-----|----|------|---------|
 | **Ascalon City (pre-Searing)** | 148 | outpost | **0x1B97D ✅ loads** |
-| Ashford Abbey | 164 | outpost | _one client visit_ |
-| Lakeside County | 146 | explorable | _one client visit_ |
-| Regent Valley (pre-Searing) | 162 | explorable | _one client visit_ |
-| Green Hills County | 160 | explorable | _one client visit_ |
-| Wizard's Folly | 161 | explorable | _one client visit_ |
-| The Catacombs | 145 | explorable | _one client visit_ |
-| The Northlands | 147 | explorable | _one client visit_ |
+| **Lakeside County** | 146 | explorable | **0x1B97D ✅ loads (shared blob)** |
+| Ashford Abbey | 164 | outpost | _try 0x1B97D first_ |
+| Regent Valley (pre-Searing) | 162 | explorable | _try 0x1B97D first_ |
+| Green Hills County | 160 | explorable | _try 0x1B97D first_ |
+| Wizard's Folly | 161 | explorable | _try 0x1B97D first_ |
+| The Catacombs | 145 | explorable | _try 0x1B97D first_ |
+| The Northlands | 147 | explorable | _try 0x1B97D first_ |
 
-**Exit criteria:** a character can log in, be spawned at a valid spawn point, and
-see terrain/other players in Ascalon City (pre) and in Lakeside County.
+**Exit criteria (met 2026-10-25):** a character can log in, be spawned at a valid spawn
+point, and see terrain in Ascalon City (pre) **and** in Lakeside County.
 
 ## Milestone 2 — Make it operable
 

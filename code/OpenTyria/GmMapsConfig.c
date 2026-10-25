@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 GmMapConfig s_KamadanJewelOfIstanOutpost = {
     .map_id = MapId_KamadanJewelOfIstanOutpost,
@@ -32,22 +32,19 @@ GmMapConfig s_AscalonCityPreSearing = {
     },
 };
 
-// Lakeside County, map id 146 -- configured on a HYPOTHESIS that needs one test.
+// Lakeside County, map id 146 -- **verified** 2026-10-25.
 //
-// The live client, standing in Lakeside County (map 146, an explorable), reports the
-// same navmesh as Ascalon City (map 148, an outpost): 58 planes, 6120 trapezoids,
-// bounds -18432,-24576 .. 21504,24576. Those are the numbers of blob 0x1B97D, the
-// blob that loads Ascalon City correctly. Two readings are possible:
+// This map uses the SAME blob as Ascalon City (0x1B97D), and the tester confirmed the
+// character spawns exactly where it should in Lakeside County. That is an answer, not
+// an accident: pre-Searing maps share region-scale geometry, and what selects the place
+// inside it is the map id plus the spawn coordinate.
 //
-//   (a) pre-Searing maps share one region-scale navmesh, so 146 legitimately uses the
-//       same blob -- this config is then right;
-//   (b) Map.Pathing.GetPathingMaps() was serving the previous map's records, so the
-//       fingerprint says nothing about 146 and this file id may be wrong.
-//
-// A blob carries no map identity (checked: no name string, no name_id in map 148's or
-// Kamadan's blob), so the blob cannot settle it. The terrain the client draws can:
-// if this config is right the character stands in Lakeside's open country, if it is
-// wrong the character stands in Ascalon City while the map id says 146.
+// Consequences worth keeping in mind:
+//   - `map_file_id` is *not* one per map. Several map ids can share one blob, so an
+//     identical navmesh fingerprint across two maps is expected, not suspicious.
+//   - Because a blob is shared, the fingerprint identifies the *region file*, so it
+//     cannot by itself prove which map inside that region is meant. The map id and the
+//     spawn point carry that; the client's own terrain is the check.
 GmMapConfig s_LakesideCounty = {
     .map_id = MapId_LakesideCounty,
     .map_file_id = 0x1B97D,

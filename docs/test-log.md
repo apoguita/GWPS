@@ -600,3 +600,32 @@ exactly the right place, `s_AscalonCityPreSearing` is now fully verified rather 
 partly assumed.
 
 Per-map cost is now: one client visit, one command, and the blob id falls out.
+
+---
+
+## T7-variant 2 -- Lakeside County loads -- **PASS**, and the blob is shared -- 2026-10-25 -- `64c6641`
+
+Tester logged into the GWPS server with `last_outpost = 146` and **spawned exactly where
+they should in Lakeside County**, using the same `map_file_id` as Ascalon City:
+`0x1B97D`, spawn `(6602, 4485, plane 0)`.
+
+**This is a design fact, not a lucky guess.** Two maps with different types -- 148 is an
+outpost (type 10), 146 an explorable (type 2) -- load from one blob, and the map id plus
+the spawn coordinate select the place inside it.
+
+It also retires the ambiguity that stalled the probe: Lakeside's navmesh fingerprint
+being identical to Ascalon City's was *correct*, not stale. `Map.Pathing.GetPathingMaps()`
+was telling the truth both times.
+
+Consequences this establishes:
+
+1. **`map_file_id` is not one-per-map.** Several map ids share a region blob. The
+   fingerprint identifies the *region file*; the map id and spawn point choose the spot.
+   So a fingerprint match proves "this blob holds the geometry the client is using",
+   never "this blob is this map".
+2. **The remaining Pre-Searing maps are likely the same blob.** Ascalon City and
+   Lakeside County already share it; whether Regent Valley, Green Hills, Wizard's
+   Folly, the Catacombs and the Northlands do is now a cheap question -- try
+   `0x1B97D` with a spawn point read from the live client, and look at the terrain.
+3. Milestone 1's exit criteria -- a character logs in, spawns at a valid point, and sees
+   terrain in **Ascalon City (pre) and Lakeside County** -- are **met**.
