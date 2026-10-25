@@ -31,6 +31,14 @@ $ErrorActionPreference = 'Stop'
 $beginMarker = '# --- GWPS private server ---'
 $endMarker = '# --- end GWPS ---'
 
+# An elevated window's output is not returned to the caller, so every run records what it did.
+# That matters: a refresh that removed the old block and then failed to write the new one left
+# the machine with no redirection at all, and nothing said so.
+$log = Join-Path (Split-Path -Parent $PSScriptRoot) 'build\hosts-gwps.log'
+function Note($m) {
+    "$(Get-Date -Format HH:mm:ss.fff) $m" | Out-File -FilePath $log -Append -Encoding utf8
+}
+
 $lines = @(
     '127.0.0.1 Auth1.ArenaNetworks.com',
     # The client uses more than one file server: a DNS capture (tools/capture-dns.ps1) caught
@@ -73,12 +81,13 @@ if ($Disable) {
 }
 
 if ($Enable) {
-    $backup = "$HostsPath.gwps-backup"
-    if (-not (Test-Path $backup)) { Copy-Item $HostsPath $backup -Force }
+    try {
+        $backup = "$HostsPath.gwps-backup"
+        if (-not (Test-Path $backup)) { Copy-Item $HostsPath $backup -Force }
 
-    # Refresh rather than skip: an existing block may be an older, shorter set, and the client
-    # keeps finding new names (File2 was only discovered by capturing its DNS queries).
-    if ($enabled) {
+        # One write, not remove-then-append. The earlier two-step version removed the old block
+        # and then failed to write the new one, leaving the machine with no redirection at all
+        # and nothing in the output to say so.
         $kept = New-Object System.Collections.Generic.List[string]
         $skipping = $false
         foreach ($line in ($content -split "`r?`n")) {
@@ -86,10 +95,21 @@ if ($Enable) {
             if ($line.Trim() -eq $endMarker) { $skipping = $false; continue }
             if (-not $skipping) { $kept.Add($line) }
         }
-        Set-Content -Path $HostsPath -Value ($kept -join "`r`n") -Encoding ascii
-    }
+        while ($kept.Count -gt 0 -and $kept[$kept.Count - 1].Trim() -eq '') {
+            $kept.RemoveAt($kept.Count - 1)
+        }
 
-    Add-Content -Path $HostsPath -Value (@('', $beginMarker) + $lines + @($endMarker))
-    'enabled'
+        $new = (@($kept) + @('', $beginMarker) + $lines + @($endMarker)) -join "`r`n"
+        Set-Content -Path $HostsPath -Value $new -Encoding ascii
+
+        # Read it back: the only trustworthy confirmation is the file itself.
+        $check = Get-Content $HostsPath -Raw
+        $ok = $check -match [regex]::Escape($beginMarker) -and $check -match [regex]::Escape('File2.ArenaNetworks.com')
+        Note "enable: $($lines.Count) entries, read-back ok=$ok"
+        if ($ok) { 'enabled' } else { 'FAILED: block not present after write' }
+    } catch {
+        Note "enable failed: $($_.Exception.Message)"
+        throw
+    }
     return
 }
