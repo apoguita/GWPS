@@ -39,9 +39,8 @@ int AuthSrvCtrl_FindCompatibleGameSrv(AuthSrv *srv, GmDistrict district, size_t 
     // of region/language/map_type/district_number failed somewhere in that chain.
     for (size_t idx = 0; idx < n_games; ++idx) {
         GameSrvMetadata *metadata = &srv->games[idx];
-        if (metadata->district.map_id == district.map_id &&
-            metadata->district.map_type == district.map_type) {
-            log_warn("Reusing server %u for map %d by map id alone: its district differs "
+        if (metadata->district.map_id == district.map_id) {
+            log_warn("Reusing server %u for map %d by map id ALONE: its district differs "
                      "(type %d vs %d, region %d vs %d, language %d vs %d, district %u vs %u)",
                      metadata->server_id, (int) district.map_id,
                      (int) metadata->district.map_type, (int) district.map_type,
