@@ -5,14 +5,14 @@
 - **Context:** Upstream ships `vc/OpenTyria.vcxproj`, but it is **stale**: it still
   lists `..\code\OpenTyria\CtrlProto.c` (line 71), a file that no longer exists,
   so the checked-in Visual Studio build does not work on a clean checkout. There
-  is no Linux build file at all, and no CI. PreSearing needs to build both here
+  is no Linux build file at all, and no CI. GWPS needs to build both here
   (Windows/MSVC) and eventually on Linux, reproducibly.
 
 ## Decision
 
 Add a top-level `CMakeLists.txt` as the single build definition:
 
-- One target for the server (`presearing_server`) building
+- One target for the server (`gwps_server`) building
   `code/OpenTyria/build_open_tyria.c` (the single translation unit upstream uses).
 - SQLite compiled from the vendored amalgamation as its own static library.
 - Mbed TLS pulled in via its own `add_subdirectory`, with tests/programs off.

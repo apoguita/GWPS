@@ -1,4 +1,4 @@
-# ADR 0001 — Fork OpenTyria as `PreSearing` instead of patching upstream
+# ADR 0001 — Fork OpenTyria as `GWPS` instead of patching upstream
 
 - **Status:** Accepted
 - **Date:** initial commit of this repo
@@ -9,7 +9,7 @@
 
 ## Decision
 
-Maintain `PreSearing` as an independent project, importing the OpenTyria working
+Maintain `GWPS` as an independent project, importing the OpenTyria working
 tree as its initial commit, with `apoguita/OpenTyria` kept as the `upstream`
 git remote (reference only).
 

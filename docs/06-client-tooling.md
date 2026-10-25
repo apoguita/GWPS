@@ -1,6 +1,6 @@
 # Client tooling: the Py4GW ecosystem
 
-PreSearing is a **server**. It has no client. That is normally the worst place to
+GWPS is a **server**. It has no client. That is normally the worst place to
 be when reverse-engineering a protocol — you are guessing at both ends.
 
 It is not our situation. We already have three cooperating projects that give us
@@ -13,12 +13,12 @@ deep, *programmatic* access to the real Guild Wars client:
 | **Py4GW Stealth** | `C:\Users\Apo\Py4GW_Stealth` | External-host port: reads client state from a **separate** Python process; hooks only if you opt in |
 
 All three are ours (same author as OpenTyria). Treat them as first-class
-dependencies of this project's *development loop*, even though PreSearing ships
+dependencies of this project's *development loop*, even though GWPS ships
 without them.
 
 ## Capability map
 
-| Capability | Where | Why PreSearing cares |
+| Capability | Where | Why GWPS cares |
 |-----------|-------|---------------------|
 | **StoC + CToS packet capture** | `Py4GWCoreLib/PacketSniffer.py`, `include/GW/packet_sniffer/packet_sniffer.h` | The test oracle. Lets us diff our byte stream against a real server's |
 | **`AreaInfo` table (map → file id)** | `include/GW/context/map.h:87-131`, `src/GW/map/map_methods.cpp:203-213` | **Solves the `map_file_id` problem** (see below) |
@@ -275,7 +275,7 @@ What that buys us, concretely:
 
 ## Rules of engagement
 
-- **PreSearing must not depend on Py4GW at runtime.** These are development and
+- **GWPS must not depend on Py4GW at runtime.** These are development and
   verification tools. The server stays standalone C.
 - **Prefer read-only.** `Py4GW_Stealth` is read-only unless you pass
   `game_thread=True`; the native sniffer is passive by design

@@ -1,4 +1,4 @@
-# PreSearing roadmap
+# GWPS roadmap
 
 ## The goal
 
@@ -35,7 +35,7 @@ That is milestone 0: **make Pre-Searing maps real.**
 
 ## Milestone 0 — Foundation ✅ (this commit)
 
-- [x] Fork OpenTyria into `PreSearing`, keep `upstream` remote for future pulls
+- [x] Fork OpenTyria into `GWPS`, keep `upstream` remote for future pulls
 - [x] Document architecture (`docs/01-architecture.md`)
 - [x] Document inherited scaling limits (`docs/02-scaling-limitations.md`)
 - [x] Replace the stale MSVC-only build with a portable CMake build

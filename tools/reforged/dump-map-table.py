@@ -80,7 +80,7 @@ def emit(line: str = "") -> None:
     try:
         import PySystem
         PySystem.Console.Log(
-            "PreSearing/map-table", line, PySystem.Console.MessageType.Notice
+            "GWPS/map-table", line, PySystem.Console.MessageType.Notice
         )
     except Exception:
         # Console binding is optional; stdout already has the line.
@@ -129,7 +129,7 @@ def try_map_name(map_id: int) -> str:
 
 def main() -> None:
     emit("=" * 78)
-    emit("PreSearing -- AreaInfo table dump (in-client)")
+    emit("GWPS -- AreaInfo table dump (in-client)")
     emit("=" * 78)
 
     try:

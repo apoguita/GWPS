@@ -1,7 +1,7 @@
 # Scaling limitations inherited from OpenTyria
 
 This document records **where** OpenTyria's "keep it simple" design choices stop
-scaling, with the exact source locations, so that PreSearing can decide
+scaling, with the exact source locations, so that GWPS can decide
 deliberately which ones to keep and which ones to pay down.
 
 Baseline analysed: `apoguita/OpenTyria` @ `53acb8e` ("Minor fix to packet dumper").
@@ -385,7 +385,7 @@ how many logins are in flight.
 
 ---
 
-## What this means for PreSearing
+## What this means for GWPS
 
 None of the above blocks a *private* Pre-Searing server with tens of concurrent
 players. The realistic numbers on one modern machine with this codebase:

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Prepare this machine to run Phase 0 of the PreSearing test plan.
+    Prepare this machine to run Phase 0 of the GWPS test plan.
 
 .DESCRIPTION
     Does every mechanical prerequisite in docs/04-scope.md and changes nothing
@@ -8,7 +8,7 @@
     Safe to re-run: each step is skipped when it is already done.
 
     What it does:
-      1. builds presearing_server and portal.dll
+      1. builds gwps_server and portal.dll
       2. seeds db/database.db if missing
       3. copies Gw.dat into the repo root (the server opens "Gw.dat" relative to
          its working directory -- GameSrv.c:103)
@@ -59,12 +59,12 @@ try {
     if (-not (Test-Path 'build')) {
         & cmake -S . -B build -G 'Visual Studio 17 2022' -A x64 | Out-Null
     }
-    & cmake --build build --config $Config --target presearing_server portal 2>&1 |
+    & cmake --build build --config $Config --target gwps_server portal 2>&1 |
         Select-Object -Last 3 | ForEach-Object { "       $_" }
     if ($LASTEXITCODE -ne 0) { throw "build failed ($LASTEXITCODE)" }
-    $exe = Get-ChildItem build -Recurse -Filter 'presearing_server.exe' | Select-Object -First 1
+    $exe = Get-ChildItem build -Recurse -Filter 'gwps_server.exe' | Select-Object -First 1
     $dll = Get-ChildItem build -Recurse -Filter 'portal.dll' | Select-Object -First 1
-    if (-not $exe) { throw 'presearing_server.exe not produced' }
+    if (-not $exe) { throw 'gwps_server.exe not produced' }
     if (-not $dll) { throw 'portal.dll not produced' }
     Ok "server  $($exe.FullName)"
     Ok "portal  $($dll.FullName)"

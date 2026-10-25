@@ -3,7 +3,7 @@
     Publish this repo to a new, empty GitHub repository as `origin`.
 
 .DESCRIPTION
-    PreSearing's history is an independent import of the OpenTyria tree, so it
+    GWPS's history is an independent import of the OpenTyria tree, so it
     shares no ancestor with OpenTyria. That is fine for a new repo, but it means
     two things must be true or the push is refused:
 
@@ -21,17 +21,17 @@
     not a publish target.
 
 .PARAMETER Url
-    The new repo's clone URL. Defaults to https://github.com/apoguita/PreSearing.git
+    The new repo's clone URL. Defaults to https://github.com/apoguita/GWPS.git
 
 .EXAMPLE
     ./scripts/publish.ps1
 
 .EXAMPLE
-    ./scripts/publish.ps1 -Url https://github.com/apoguita/PreSearing.git -Branch master
+    ./scripts/publish.ps1 -Url https://github.com/apoguita/GWPS.git -Branch master
 #>
 [CmdletBinding()]
 param(
-    [string] $Url = 'https://github.com/apoguita/PreSearing.git',
+    [string] $Url = 'https://github.com/apoguita/GWPS.git',
     [string] $Remote = 'origin',
     [string] $Branch = 'master'
 )

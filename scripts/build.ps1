@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Configure and build the PreSearing server.
+    Configure and build the GWPS server.
 
 .DESCRIPTION
     Thin wrapper around CMake so that a fresh checkout needs no manual setup.
@@ -11,13 +11,13 @@
     CMake build configuration. Default: RelWithDebInfo.
 
 .PARAMETER Target
-    CMake target to build. Default: presearing_server.
+    CMake target to build. Default: gwps_server.
 
 .PARAMETER Clean
     Delete the build directory first.
 
 .PARAMETER Tests
-    Also build the presearing_tests target.
+    Also build the gwps_tests target.
 
 .EXAMPLE
     ./scripts/build.ps1
@@ -28,7 +28,7 @@
 [CmdletBinding()]
 param(
     [string] $Config = 'RelWithDebInfo',
-    [string] $Target = 'presearing_server',
+    [string] $Target = 'gwps_server',
     [string] $BuildDir = 'build',
     [switch] $Clean,
     [switch] $Tests
@@ -58,17 +58,17 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "cmake build failed ($LASTEXITCODE)" }
 
     if ($Tests) {
-        Write-Host "Building target 'presearing_tests' ($Config) ..." -ForegroundColor Cyan
-        & cmake --build $BuildDir --config $Config --target presearing_tests
+        Write-Host "Building target 'gwps_tests' ($Config) ..." -ForegroundColor Cyan
+        & cmake --build $BuildDir --config $Config --target gwps_tests
         if ($LASTEXITCODE -ne 0) { throw "cmake build (tests) failed ($LASTEXITCODE)" }
     }
 
-    $exe = Get-ChildItem -Path $BuildDir -Recurse -Filter 'presearing_server.exe' -ErrorAction SilentlyContinue |
+    $exe = Get-ChildItem -Path $BuildDir -Recurse -Filter 'gwps_server.exe' -ErrorAction SilentlyContinue |
            Select-Object -First 1
     if ($exe) {
         Write-Host "OK -> $($exe.FullName)" -ForegroundColor Green
     } else {
-        Write-Host "Build finished, but presearing_server.exe was not found." -ForegroundColor Yellow
+        Write-Host "Build finished, but gwps_server.exe was not found." -ForegroundColor Yellow
     }
 }
 finally {

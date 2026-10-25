@@ -1,8 +1,10 @@
-# PreSearing
+# GWPS
 
-A private **Pre-Searing Ascalon** server for Guild Wars.
+**GWPS** — Guild Wars Private Server. In this deployment it also reads as *Guild
+Wars Pre-Searing*, which is what it serves: a private **Pre-Searing Ascalon**
+server.
 
-PreSearing is an independent project forked from
+GWPS is an independent project forked from
 [apoguita/OpenTyria](https://github.com/apoguita/OpenTyria) (kept as the
 `upstream` git remote, reference only). The goal is narrow on purpose: make the
 Prophecies tutorial region — Ascalon City (pre), Ashford Abbey, Lakeside County,
@@ -47,12 +49,12 @@ actually playable, and make the server underneath it operable and survivable.
 ./scripts/build.ps1
 ```
 
-That configures CMake and produces `build/<Config>/presearing_server.exe`.
+That configures CMake and produces `build/<Config>/gwps_server.exe`.
 Equivalent by hand:
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config RelWithDebInfo --target presearing_server
+cmake --build build --config RelWithDebInfo --target gwps_server
 ```
 
 ### Seed the database

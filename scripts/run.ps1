@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Run the PreSearing server stack locally.
+    Run the GWPS server stack locally.
 
 .DESCRIPTION
     The server resolves "db/database.db" and "Gw.dat" as paths RELATIVE TO THE
@@ -45,10 +45,10 @@ try {
         }
     }
 
-    $exe = Get-ChildItem -Path $BuildDir -Recurse -Filter 'presearing_server.exe' -ErrorAction SilentlyContinue |
+    $exe = Get-ChildItem -Path $BuildDir -Recurse -Filter 'gwps_server.exe' -ErrorAction SilentlyContinue |
            Select-Object -First 1
     if (-not $exe) {
-        throw "presearing_server.exe not found under '$BuildDir'. Run ./scripts/build.ps1 first."
+        throw "gwps_server.exe not found under '$BuildDir'. Run ./scripts/build.ps1 first."
     }
 
     $gate = $null

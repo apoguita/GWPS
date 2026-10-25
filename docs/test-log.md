@@ -25,8 +25,8 @@ Command:
 Observed:
 - `scripts/build.ps1 -Clean` configured with the Visual Studio 17 2022 generator
   (MSVC 19.42.34435.0) and produced
-  `build/RelWithDebInfo/presearing_server.exe`.
-- `presearing_tests.exe` also builds (`-Tests`).
+  `build/RelWithDebInfo/gwps_server.exe`.
+- `gwps_tests.exe` also builds (`-Tests`).
 - `portal.dll` builds via `cmake --build build --target portal`.
 - `scripts/seed-db.ps1 -Force` created `db/database.db` from `db/seed.sql`.
 - Smoke run: server started, logged
@@ -211,7 +211,7 @@ reports no warning.
 
 `./scripts/phase0-prepare.ps1` completed all five steps:
 
-- built `presearing_server.exe` and `portal.dll`
+- built `gwps_server.exe` and `portal.dll`
 - `db/database.db` already seeded (left untouched)
 - copied `Gw.dat` (3,486 MB) into the repo root -- the server opens it relative to
   its working directory (`GameSrv.c:103`)

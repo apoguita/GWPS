@@ -21,7 +21,7 @@ from py4gw.context.instance_info_context import AreaInfoStruct
 
 CSV_PATH = os.environ.get(
     "GW_MAPS_CSV",
-    r"C:\Users\Apo\Documents\GitHub\PreSearing\data\gwdat-maps.csv",
+    r"C:\Users\Apo\Documents\GitHub\GWPS\data\gwdat-maps.csv",
 )
 
 PRESEARING_IDS = [

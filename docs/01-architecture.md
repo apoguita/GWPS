@@ -1,4 +1,4 @@
-# PreSearing architecture (as inherited from OpenTyria)
+# GWPS architecture (as inherited from OpenTyria)
 
 This is the map of the stack we forked, so every later change has a shared
 reference. It describes **what exists today**, not what we want it to become
@@ -88,7 +88,7 @@ client, so the client skips the real portal round-trip.
 ### `vc/`
 MSVC solution/projects (`OpenTyria.sln`, `OpenTyria.vcxproj`, `mbedtls.vcxproj`,
 `Portal.vcxproj`). **Note:** `OpenTyria.vcxproj` is stale — it still lists
-`CtrlProto.c`, which no longer exists. PreSearing replaces this with CMake
+`CtrlProto.c`, which no longer exists. GWPS replaces this with CMake
 (`CMakeLists.txt`); the `vc/` files are kept only for reference.
 
 ## Connection lifecycle (happy path)

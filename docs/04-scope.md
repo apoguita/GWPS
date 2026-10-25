@@ -145,7 +145,7 @@ in `docs/test-log.md` (append-only) with date, build hash, and log excerpt.
 ./scripts/build.ps1 -Clean
 ./scripts/seed-db.ps1 -Force
 ```
-**Pass:** `presearing_server.exe` produced; `db/database.db` exists.
+**Pass:** `gwps_server.exe` produced; `db/database.db` exists.
 
 ### T1 — Web gate works (no client needed)
 Start `python tools/webgate.py`, then request the session-create endpoint.
