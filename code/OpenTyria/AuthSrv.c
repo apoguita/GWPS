@@ -1010,6 +1010,27 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
 
     GameSrvMetadata *metadata = &srv->games[idx];
 
+    // The chosen server has to serve the map that was actually asked for. Without this a
+    // mis-selection does not fail, it sends the player somewhere else: observed 2026-10-25,
+    // a request for Ashford (164) answered by the Barradin server (163), and a request for
+    // Barradin answered by the Foibles server (165). The client is not at fault -- it goes
+    // exactly where the redirect points. Refuse rather than mis-route, so the worst
+    // outcome of a bad selection is a teleport that does nothing.
+    if (metadata->district.map_id != msg->district.map_id) {
+        log_error("Refusing a transfer to map %d: the selected server %u serves map %d "
+                  "(requested: type %d, district %u; selected: type %d, district %u)",
+                  (int) msg->district.map_id, metadata->server_id,
+                  (int) metadata->district.map_id,
+                  (int) msg->district.map_type, msg->district.district_number,
+                  (int) metadata->district.map_type, metadata->district.district_number);
+        AuthSrvCtrl_SendCancelPlayerTransfer(conn);
+        return ERR_OK;
+    }
+
+    log_info("StartPlayerTransfer from server %u: player %u, map %d (type %d, district %u)",
+             conn->server_id, msg->player_id, (int) msg->district.map_id,
+             (int) msg->district.map_type, msg->district.district_number);
+
     // The registry is what the client's *next* connection is validated against: when it
     // reconnects, `AuthSrv` compares the handshake's map_token and player_token with
     // these two fields and drops the connection when they disagree ("User connected to

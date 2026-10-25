@@ -1407,9 +1407,16 @@ void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistric
     srv->transfer_district = district;
     srv->transfer_pending = true;
 
+    // Read the values back out of the message that was actually written, not out of the
+    // local variable: the auth server acts on the message, so if the two ever disagree the
+    // log has to show the message. A request for Ashford (164) once reached the auth as
+    // Barradin (163) and teleported the player to the wrong map.
     log_info("Asked the auth server for a game server on map %d (district %u); redirect "
-             "will use connection %04" PRIXPTR, (int) district.map_id,
-             district.district_number, player->conn_token);
+             "will use connection %04" PRIXPTR " [message carries: map %d, type %d, "
+             "district %u]", (int) district.map_id, district.district_number,
+             player->conn_token, (int) msg.StartPlayerTransfer.district.map_id,
+             (int) msg.StartPlayerTransfer.district.map_type,
+             msg.StartPlayerTransfer.district.district_number);
 }
 
 void GameSrvCtrl_StartPlayerTransfer(GameSrv *srv, GmPlayer *player)
