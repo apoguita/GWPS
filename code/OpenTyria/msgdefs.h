@@ -17,10 +17,6 @@ typedef enum FieldType {
     TYPE_ARRAY_16       = 12,
     TYPE_ARRAY_32       = 13,
     TYPE_NESTED_STRUCT  = 14,
-    // A game message header: 2 bytes in the struct, 4 on the wire (u16 header + u16
-    // zero). Auth message headers stay TYPE_MSG_HEADER, because the auth protocol really
-    // is 2 bytes -- which is why the difference has to be a field type and not a global.
-    TYPE_MSG_HEADER_GAME = 15,
 } FieldType;
 
 typedef struct MsgField MsgField;

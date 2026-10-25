@@ -27,23 +27,6 @@ int unpack_helper(
     for (size_t idx = 0; idx < n_fields; ++idx) {
         MsgField field = fields[idx];
         switch (field.type) {
-        case TYPE_MSG_HEADER_GAME:
-            // A game message header is FOUR bytes on the wire: 6 01 00 00, u16 header
-            // plus a u16 that is always zero (verified across 698 captured StoC packets
-            // and 11 CToS ones -- u16@+2 == 0 in every single one). Our structs keep a
-            // 2-byte header, so the two padding bytes are consumed here and nowhere else.
-            // Missing this put every game message two bytes out of step: it is why the
-            // 0x3D position handler read garbage, and why TRANSFER_GAME_SERVER_INFO never
-            // matched its layout.
-            if ((n_buffer - wpos) < sizeof(uint16_t) ||
-                (n_input - consumed) < 2 * sizeof(uint16_t)) {
-                return ERR_NOT_ENOUGH_DATA;
-            }
-            value_u16 = le16dec(&input[consumed]);
-            memcpy(&buffer[wpos], &value_u16, sizeof(value_u16));
-            wpos += sizeof(uint16_t);
-            consumed += 2 * sizeof(uint16_t);
-            break;
         case TYPE_MSG_HEADER:
         case TYPE_WORD:
             if ((n_buffer - wpos) < sizeof(uint16_t) ||
@@ -260,19 +243,6 @@ int pack_helper(
     for (size_t idx = 0; idx < n_fields; ++idx) {
         MsgField field = fields[idx];
         switch (field.type) {
-        case TYPE_MSG_HEADER_GAME:
-            // See the unpack side: four bytes on the wire, two of them padding.
-            if ((n_buffer - wpos) < 2 * sizeof(uint16_t) ||
-                (n_input - consumed) < sizeof(uint16_t)) {
-                return ERR_NOT_ENOUGH_DATA;
-            }
-            memcpy(&value_u16, &input[consumed], sizeof(value_u16));
-            le16enc(&buffer[wpos], value_u16);
-            buffer[wpos + 2] = 0;
-            buffer[wpos + 3] = 0;
-            wpos += 2 * sizeof(uint16_t);
-            consumed += sizeof(uint16_t);
-            break;
         case TYPE_MSG_HEADER:
         case TYPE_WORD:
             if ((n_buffer - wpos) < sizeof(uint16_t) ||
