@@ -2818,11 +2818,10 @@ MsgField GAME_SMSG_0152[5] = {
     {TYPE_DWORD, 0},
 };
 
-MsgField GAME_SMSG_0153[4] = {
+MsgField GAME_SMSG_0153[3] = {
     {TYPE_MSG_HEADER, 153},
-    {TYPE_WORD, 0},    // zero in every captured instance
-    {TYPE_DWORD, 0},   // map id
-    {TYPE_DWORD, 0},   // unknown, 0
+    {TYPE_WORD, 0},
+    {TYPE_BYTE, 0},
 };
 
 MsgField GAME_SMSG_0154[3] = {
@@ -4663,14 +4662,15 @@ MsgField GAME_SMSG_0421[14] = {
     {TYPE_BLOB, 8},
 };
 
-MsgField GAME_SMSG_0422[7] = {
-    {TYPE_MSG_HEADER, 422},
+MsgField GAME_SMSG_0422[8] = {
+    {TYPE_MSG_HEADER_GAME, 422},
     {TYPE_BLOB, 24},
-    {TYPE_DWORD, 0},   // map_token
+    {TYPE_DWORD, 0},   // token1 (world/server id)
     {TYPE_DWORD, 0},   // region
-    {TYPE_DWORD, 0},   // player_token
+    {TYPE_DWORD, 0},   // map id
     {TYPE_DWORD, 0},   // is_explorable
-    {TYPE_DWORD, 0},   // map_id
+    {TYPE_DWORD, 0},   // token2 (player token)
+    {TYPE_DWORD, 0},   // always 0 in every captured instance
 };
 
 MsgField GAME_SMSG_0423[10] = {
@@ -5541,7 +5541,7 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {150, 6,  GAME_SMSG_0150, 22},
     {151, 3,  GAME_SMSG_0151, 263},
     {152, 5,  GAME_SMSG_0152, 15},
-    {153, 4,  GAME_SMSG_0153, 12},
+    {153, 3,  GAME_SMSG_0153, 5},
     {154, 3,  GAME_SMSG_0154, 10},
     {155, 3,  GAME_SMSG_0155, 74},
     {156, 3,  GAME_SMSG_0156, 10},
@@ -5810,7 +5810,7 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {419, 7,  GAME_SMSG_0419, 20},
     {420, 4,  GAME_SMSG_0420, 499},
     {421, 14, GAME_SMSG_0421, 83},
-    {422, 7,  GAME_SMSG_0422, 46},
+    {422, 8,  GAME_SMSG_0422, 50},
     {423, 10, GAME_SMSG_0423, 514},
     {424, 2,  GAME_SMSG_0424, 3},
     {425, 3,  GAME_SMSG_0425, 7},

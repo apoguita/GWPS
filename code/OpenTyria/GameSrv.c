@@ -150,25 +150,6 @@ array_uint16_t* GameSrv_GetTextBuilder(GameSrv *srv)
     return &srv->text_builder;
 }
 
-//: Trace every outgoing game message, header and size and first bytes.
-//:
-//: Set GWPS_TRACE=1 in the environment. Off by default because it is one line per message.
-//: It exists because a client that dies during a load looks identical whether we sent it
-//: one malformed message, a message of the wrong size, or the right messages in the wrong
-//: order -- and the only way to tell those apart is to look at what actually went out.
-static bool g_trace_messages_checked;
-static bool g_trace_messages;
-
-static bool GameSrv_TraceMessages(void)
-{
-    if (!g_trace_messages_checked) {
-        const char *env = getenv("GWPS_TRACE");
-        g_trace_messages = (env != NULL && env[0] != '\0' && env[0] != '0');
-        g_trace_messages_checked = true;
-    }
-    return g_trace_messages;
-}
-
 int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t size)
 {
     int err;
@@ -178,17 +159,6 @@ int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t siz
 
     assert(msg->header == format.header);
     assert(size == format.unpack_size);
-
-    // The client does not read a length off the wire: it looks up how many bytes the header
-    // carries and waits for exactly that many. So a struct that disagrees with its format
-    // table entry does not fail here, it desynchronises the client's stream -- and assert()
-    // is compiled out in the configuration we ship. Say so plainly when it happens.
-    if (size != format.unpack_size || msg->header != format.header) {
-        log_error("Message %u is %zu bytes in the struct but %zu in the format table "
-                  "(format header %u): the client reads the table's size, so this "
-                  "desynchronises its stream",
-                  msg->header, size, format.unpack_size, format.header);
-    }
 
     size_t size_before = array_size(&conn->outgoing);
 
@@ -202,17 +172,6 @@ int GameConnection_SendMessage(GameConnection *conn, GameSrvMsg *msg, size_t siz
         log_error("Failed to serialized message %u", msg->header);
         array_shrink(&conn->outgoing, size_before);
         return err;
-    }
-
-    if (GameSrv_TraceMessages()) {
-        char hex[3 * 24 + 1];
-        size_t n_show = written < 24 ? written : 24;
-        for (size_t idx = 0; idx < n_show; ++idx) {
-            snprintf(&hex[idx * 3], 4, "%02X ", dst[idx]);
-        }
-        hex[n_show * 3] = '\0';
-        log_info("SEND %4u 0x%04X %3zu bytes -> conn %04" PRIXPTR " : %s",
-                 msg->header, msg->header, written, conn->token, hex);
     }
 
     array_shrink(&conn->outgoing, size_before + written);
@@ -738,9 +697,8 @@ void GameSrv_SendCurrentMap(GameSrv *srv, GameConnection *conn)
 {
     GameSrvMsg *buffer = GameSrv_BuildMsg(srv, GAME_SMSG_MAP_UPDATE_CURRENT);
     GameSrv_UpdateCurrentMap *msg = &buffer->update_current_map;
-    msg->unk = 0;
     msg->map_id = srv->district.map_id;
-    msg->unk2 = 0;
+    msg->unk = 0;
     GameConnection_SendMessage(conn, buffer, sizeof(*msg));
 }
 
@@ -1378,7 +1336,6 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     log_info("Sent TRANSFER_GAME_SERVER_INFO: map %d, server %u, player token %u -> "
              "connection %04" PRIXPTR " (err %d)", (int) msg->map_id, msg->map_token,
              msg->player_token, conn->token, send_err);
-
 }
 
 void GameSrvCtrl_StartPlayerTransferTo(GameSrv *srv, GmPlayer *player, GmDistrict district)

@@ -319,14 +319,10 @@ typedef struct GameSrv_HardModeUnlocked {
     uint8_t  hard_mode_unlocked;
 } GameSrv_HardModeUnlocked;
 
-// 12 bytes, from two captured live transitions: 99 00 | 00 00 | a5 00 00 00 | 00 00 00 00
-// -- a normal 2-byte header, a zero WORD, then the map id and an unknown as DWORDs. Our
-// earlier version had map id and unknown one size too small (5 bytes).
 typedef struct GameSrv_UpdateCurrentMap {
     uint16_t header;
-    uint16_t unk;
-    uint32_t map_id;
-    uint32_t unk2;
+    uint16_t map_id;
+    uint8_t  unk;
 } GameSrv_UpdateCurrentMap;
 
 typedef struct GameSrv_InstanceManifestData {
@@ -657,11 +653,12 @@ typedef struct GameSrv_ChatMessageServer {
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
     uint8_t  host[24];
-    uint32_t map_token;
+    uint32_t map_token;      // token1: the world/server id
     uint32_t region;
-    uint32_t player_token;
-    uint32_t is_explorable;
     uint32_t map_id;
+    uint32_t is_explorable;
+    uint32_t player_token;   // token2
+    uint32_t unk;            // present in every captured instance, always 0
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {
