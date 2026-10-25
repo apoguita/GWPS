@@ -640,15 +640,20 @@ typedef struct GameSrv_ChatMessageServer {
     uint32_t channel;
 } GameSrv_ChatMessageServer;
 
+// Corrected 2026-10-25 against the client's GameSrvTransfer
+// (Py4GW_Reforged_Native/include/GW/common/stoc.h:820-831): every field after host is a
+// uint32 there, even the ones the client only partially uses ("region; // uint8_t").
+// We had int8 region + uint16 map_id + uint8 is_explorable, so the client read region,
+// map_id and the player token from the wrong offsets -- the redirect arrived and was
+// unusable, which is why a teleport that "worked" left the client on a loading screen.
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
     uint8_t  host[24];
     uint32_t map_token;
-    int8_t   region;
-    uint16_t map_id;
-    uint8_t  is_explorable;
+    uint32_t region;
+    uint32_t map_id;
+    uint32_t is_explorable;
     uint32_t player_token;
-    uint8_t  h00F;
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {

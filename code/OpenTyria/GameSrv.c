@@ -1306,7 +1306,12 @@ void GameSrvCtrl_HandleCompletePlayerTransfer(GameSrv *srv, CtrlMsg_CompletePlay
     msg2->map_token = msg->map_token;
     msg2->region = msg->region;
     msg2->map_id = msg->map_id;
-    msg2->is_explorable = 0;
+    // The client reads this as a uint32 flag. GameSrv_Update hardcodes 1 for the same
+    // field with a "what to put here?" comment; derive it from the district instead of
+    // guessing, because it decides how the client treats the instance it is joining.
+    msg2->is_explorable = (srv->district.map_type == MapType_MainExplorable ||
+                           srv->district.map_type == MapType_MissionExplorable ||
+                           srv->district.map_type == MapType_ArenaExplorable) ? 1 : 0;
     msg2->player_token = msg->player_token;
 
     switch (msg->address.af)
