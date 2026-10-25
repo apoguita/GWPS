@@ -27,6 +27,18 @@ int unpack_helper(
     for (size_t idx = 0; idx < n_fields; ++idx) {
         MsgField field = fields[idx];
         switch (field.type) {
+        case TYPE_MSG_HEADER_GAME:
+            // 4 bytes on the wire, 2 in the struct: the header plus a u16 that the live
+            // capture shows as always zero.
+            if ((n_buffer - wpos) < sizeof(uint16_t) ||
+                (n_input - consumed) < 2 * sizeof(uint16_t)) {
+                return ERR_NOT_ENOUGH_DATA;
+            }
+            value_u16 = le16dec(&input[consumed]);
+            memcpy(&buffer[wpos], &value_u16, sizeof(value_u16));
+            wpos += sizeof(uint16_t);
+            consumed += 2 * sizeof(uint16_t);
+            break;
         case TYPE_MSG_HEADER:
         case TYPE_WORD:
             if ((n_buffer - wpos) < sizeof(uint16_t) ||
@@ -243,6 +255,18 @@ int pack_helper(
     for (size_t idx = 0; idx < n_fields; ++idx) {
         MsgField field = fields[idx];
         switch (field.type) {
+        case TYPE_MSG_HEADER_GAME:
+            if ((n_buffer - wpos) < 2 * sizeof(uint16_t) ||
+                (n_input - consumed) < sizeof(uint16_t)) {
+                return ERR_NOT_ENOUGH_DATA;
+            }
+            memcpy(&value_u16, &input[consumed], sizeof(value_u16));
+            le16enc(&buffer[wpos], value_u16);
+            buffer[wpos + 2] = 0;
+            buffer[wpos + 3] = 0;
+            wpos += 2 * sizeof(uint16_t);
+            consumed += sizeof(uint16_t);
+            break;
         case TYPE_MSG_HEADER:
         case TYPE_WORD:
             if ((n_buffer - wpos) < sizeof(uint16_t) ||

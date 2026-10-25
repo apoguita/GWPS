@@ -646,19 +646,19 @@ typedef struct GameSrv_ChatMessageServer {
 // We had int8 region + uint16 map_id + uint8 is_explorable, so the client read region,
 // map_id and the player token from the wrong offsets -- the redirect arrived and was
 // unusable, which is why a teleport that "worked" left the client on a loading screen.
+// Matches a live server's message exactly (captured 2026-10-25, 52 bytes on the wire):
+//   a6 01 00 00 | host[24] | token1 | region | map_id | is_explorable | token2 | 0
+// The header is 4 bytes on the wire and 2 here (TYPE_MSG_HEADER_GAME), and host is a
+// sockaddr_in: family, big-endian port, address.
 typedef struct GameSrv_TransferGameServerInfo {
     uint16_t header;
     uint8_t  host[24];
-    uint32_t map_token;
+    uint32_t map_token;      // token1: the world/server id
     uint32_t region;
-    // The player token comes BEFORE map_id. Evidence, not preference: with map_id here
-    // the client connected to the new server echoing player_token = 148 -- it read our map
-    // id out of the slot where it keeps the player token, and was kicked for 'unexpected
-    // values'. The server id matched, so map_token is in the right slot; this swap is
-    // what the rest of the layout follows from.
-    uint32_t player_token;
-    uint32_t is_explorable;
     uint32_t map_id;
+    uint32_t is_explorable;
+    uint32_t player_token;   // token2
+    uint32_t unk;            // present in every captured instance, always 0
 } GameSrv_TransferGameServerInfo;
 
 typedef struct GameSrv_DropItem {
