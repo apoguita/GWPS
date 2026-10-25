@@ -1407,10 +1407,67 @@ void AuthSrv_DoPostHandshake(AuthSrv *srv, Connection *conn)
     }
 }
 
+// The client opens a second kind of connection to this same port for its file/version check:
+// it resolves File1.ArenaNetworks.com, which the GWPS hosts entries now point at us, and
+// speaks a small fixed exchange there. Captured from the real server
+// (tools/capture-filesrv.ps1, tools/parse-pcapng.py): 21 bytes out, 32 bytes back.
+//
+//   client  01 00 00 00 00 f1 00 10 00 01 00 00 00 00 00 00 00 00 00 00 00
+//   server  f1 02 20 00 | 391339 391348 344988 391350 391351 0 391349
+//
+// Six tight-consecutive ids and a zero, in the same range as Gw.dat file ids: a check of
+// which files the client should have, not a transfer. The auth handshake starts with
+// 0x000C0400, so telling the two apart is exact rather than heuristic.
+//
+// The reply below is the captured one, replayed: the request is constant, so a real server's
+// answer to it is a faithful answer. What this does not yet establish is whether the client
+// accepts that answer from anyone but ArenaNet -- that is what the next test tells us, and if
+// it turns out to want the files themselves, these ids are the ones to serve.
+static bool AuthSrv_TryHandleFileCheck(AuthSrv *srv, Connection *conn)
+{
+    UNREFERENCED_PARAMETER(srv);
+
+    static const uint8_t request[21] = {
+        0x01, 0x00, 0x00, 0x00, 0x00, 0xF1, 0x00, 0x10, 0x00, 0x01, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    static const uint8_t response[32] = {
+        0xF1, 0x02, 0x20, 0x00,
+        0xAB, 0xF7, 0x05, 0x00,
+        0xB4, 0xF7, 0x05, 0x00,
+        0x9C, 0x43, 0x05, 0x00,
+        0xB6, 0xF7, 0x05, 0x00,
+        0xB7, 0xF7, 0x05, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0xB5, 0xF7, 0x05, 0x00,
+    };
+
+    if (conn->n_incoming < sizeof(request) ||
+        memcmp(conn->incoming, request, sizeof(request)) != 0)
+    {
+        return false;
+    }
+
+    Connection_RemoveIncoming(conn, sizeof(request));
+
+    size_t sent = 0;
+    int err = sys_send(conn->source.socket, response, sizeof(response), &sent);
+    log_info("File check on %04" PRIXPTR ": answered %zu of %zu bytes (err %d)",
+             conn->source.socket, sent, sizeof(response), err);
+    return true;
+}
+
 void AuthSrv_DoHandshake(AuthSrv *srv, Connection *conn)
 {
     int err;
     do {
+        if (conn->state == ConnState_AwaitHello && AuthSrv_TryHandleFileCheck(srv, conn)) {
+            // Wait for more: the client repeats the check, and anything that follows it is a
+            // normal handshake.
+            err = ERR_WOULDBLOCK;
+            break;
+        }
+
         switch (conn->state) {
         case ConnState_AwaitHello:
             err = Connection_ReadVersion(conn);
