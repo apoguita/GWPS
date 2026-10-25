@@ -173,6 +173,19 @@ void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char 
         return;
     }
 
+    // OFF BY DEFAULT since 2026-10-25: sending this crashed the client twice. Our chat
+    // layouts were corrected against the client's stoc.h, but a live capture showed that
+    // stoc.h itself disagrees with the wire for at least one payload-free packet
+    // (PING_REQUEST is 4 bytes on the wire where the struct implies 8), so the header
+    // width is still unsettled and every message we send is a guess. Until a capture of
+    // a real server's chat settles it, GM answers go to the log only.
+    // `GWPS_CHAT=1` turns sending back on for experimenting.
+    const char *enable = getenv("GWPS_CHAT");
+    if (enable == NULL || strcmp(enable, "1") != 0) {
+        log_info("GM answer (chat disabled, set GWPS_CHAT=1 to send): %s", ascii);
+        return;
+    }
+
     // Leave headroom: the client renders the text with a channel prefix.
     enum { CHUNK = CHAT_MESSAGE_FRAGMENT_MAX_LENGTH - 24 };
     uint16_t buffer[CHUNK];
