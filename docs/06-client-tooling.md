@@ -395,20 +395,52 @@ filter, and whether it was sanitised. The rest are packets:
  "redacted":null,"masked":[]}
 ```
 
-Status: the sanitiser and writer are covered by `--self-test` (11 checks), and the
-drain/clear/terminate/disconnect loop was exercised offline against a stand-in
-`py4gw` package. **The live run is still owed** — it needs an elevated shell and a
-running client, and it is the first thing to do the next time a client is up.
+Status: **live in both directions, 2026-10-24.** The sanitiser and writer are covered
+by `--self-test` (11 checks) and the drain/clear/terminate/disconnect loop was
+exercised offline against a stand-in `py4gw` package; the live run then captured
+**711 packets in 28.5 s across 34 headers** from `Gw.exe` pid 33540, both halves,
+every handler entry restored, client alive (see `docs/test-log.md`). Note what that
+capture is: the GWPS server was *not* running (ports 6112/6113 free), so it is
+reference traffic from a stock client against a live server — a **golden capture**,
+not a pass for our stack.
 
-#### What GWPS should use it for first
+#### What the first capture settled: `0x3D` (finding F7)
 
-The `0x3D` position stream (finding F7) is the obvious first target: our handler
-was written from `msgdefs`' format table, never from a decoded packet. The client's
-own table says `KNOWN_CTOS_LENGTHS[0x3D] = 28`, i.e. **4-byte header + a 24-byte
-payload**, which agrees with `GameSrv_PositionUpdate` (2-byte header + `pos`,
-`plane`, `unknown_vec`, `unknown`) and with the format entry
-`{61, 5, GAME_CMSG_0061, 26}`. A capture turns that agreement into proof and says
-what the second vector actually is.
+The `0x3D` handler was written from `msgdefs`' format table, never from a decoded
+packet. The first live capture answered it with ten 28-byte `CToS 0x3D` packets:
+
+```
+3d 00 00 00 | 34 23 1b 46 | 24 ec df c3 | 00 00 00 00 | 5c b2 05 44 | 9c a7 09 44 | 01 00 00 00
+header      | pos.x       | pos.y       | plane       | dir.x       | dir.y       | flag
+```
+
+- **28 bytes on the wire = 4-byte header + the exact 24-byte payload our struct
+  expects.** `GmMath`'s `Vec2f` is two floats, so `header(2) + pos(8) + plane(4) +
+  unknown_vec(8) + unknown(4) = 26` agrees with `{61, 5, GAME_CMSG_0061, 26}`.
+- **`unknown_vec` is a heading, not an unknown.** Its magnitude is a constant
+  `765.02` in 9 of 10 packets, and normalised it equals the direction of travel
+  measured between consecutive reports — `Δ = (170.6, 175.6)` → `(0.6970, 0.7172)`
+  against `dir = (534.79, 550.62)` → `(0.6967, 0.7173)`. Normalise it before use;
+  the raw magnitude is not a distance.
+- **It is a position report, not a move order.** Position advances at 278–302
+  units/s, and each report *trails* the `AGENT_MOVE_TO_POINT` (`StoC 0x29`)
+  waypoints the same agent is following — the signature of a client reporting where
+  it is, not where it is going. `0x003E MOVE_TO_COORD` never appeared in the window.
+- **Rate is not fixed.** Ten in 28 s while walking (~0.36 Hz), not the ~2 Hz F7
+  assumed from our own server's log.
+
+Two consequences worth carrying:
+
+- The client's own table calls this header `MOVE_TO_COORD_WITH_DIR`, while our
+  `opcodes.h` calls it `GAME_CMSG_POSITION_UPDATE` (finding F9). The payload says
+  ours is the better description, but when cross-referencing client tooling, expect
+  their name.
+- The tool originally recorded the client "build" from the executable's version
+  resource, which reads `1.0.0.1` on this install while the tooling documents itself
+  against build `39112` (finding F10). The capture header now records
+  `sha256` + `file_version` + `size`; the hash is what identifies a build.
+
+#### What GWPS should use it for next
 
 ## Recommended division of labour
 

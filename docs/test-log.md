@@ -340,3 +340,67 @@ Findings: none of ours. Two hazards recorded rather than fixed here:
 - a second runtime rewriting handler entries after the restore, so **run one
   sniffer at a time** and read an entry mismatch as another runtime's, not as a
   failed restore.
+
+---
+
+## Live capture — packet sniffer, both directions — PASS — 2026-10-24 — `d718b2d`
+
+Command (elevated shell, one UAC prompt approved):
+
+```powershell
+python tools/sniff-capture.py --seconds 20 --dir both --out captures/live-20261024-212230.jsonl
+```
+
+Observed:
+
+- client `Gw.exe` pid 33540 (`F:\GW\GW1\Gw.exe`); 711 packets in **28.5 s**, both
+  directions, 34 distinct headers; sanitised output; exit 0; client alive.
+- heaviest: `StoC 0x001E WORLD_SIMULATION_TICK` 276, `StoC 0x009F
+  AGENT_PROPERTY_UPDATE_INT` 53, `StoC 0x0029 AGENT_MOVE_TO_POINT` 45,
+  `StoC 0x0020 WORLD_CREATE_AGENT` 34.
+- outbound: `CToS 0x003D` x10, `CToS 0x0039 INTERACT_LIVING` x1.
+
+**Scope note — this is a golden capture, not a pass for our stack.** The GWPS server
+was not running (nothing listening on 6112/6113), so the traffic is a stock client
+against a live server. That is exactly the reference capture the test plan wants;
+it says nothing about our game server yet.
+
+### F7 — RESOLVED: `0x3D` is 28 bytes of position + plane + heading
+
+Ten packets, all `size = 28`:
+
+```
+3d 00 00 00 | 34 23 1b 46 | 24 ec df c3 | 00 00 00 00 | 5c b2 05 44 | 9c a7 09 44 | 01 00 00 00
+header      | pos.x       | pos.y       | plane       | dir.x       | dir.y       | flag
+```
+
+- 28 bytes on the wire = 4-byte header + **the 24-byte payload our struct already
+  has**. `GameSrv_PositionUpdate` (2-byte header + `pos`, `plane`, `unknown_vec`,
+  `unknown` = 26) and the format table entry `{61, 5, GAME_CMSG_0061, 26}` both
+  agree with the capture. The handler parses the right layout.
+- `unknown_vec` is a **heading**: magnitude is a constant 765.02 in 9 of 10 packets,
+  and normalised it equals the travel direction between consecutive reports
+  (`Δ = (170.6, 175.6)` → `(0.6970, 0.7172)` vs `dir` → `(0.6967, 0.7173)`).
+- It is a **position report, not a move order**: position advances at 278–302 u/s and
+  each report trails the `AGENT_MOVE_TO_POINT` (`0x29`) waypoints the same agent is
+  following. `0x003E MOVE_TO_COORD` never appeared.
+- `plane` was 0 and 22 in the same run; the trailing dword was `1` every time.
+- Rate while walking: ~0.36 Hz, not the ~2 Hz F7 assumed from our server's log.
+
+### F9 — our name for `0x3D` differs from the client's table
+
+The client's own table calls header 61 `MOVE_TO_COORD_WITH_DIR`; `opcodes.h` calls it
+`GAME_CMSG_POSITION_UPDATE`. The captured payload is a position report, so our name
+describes it better — but anyone cross-referencing client tooling will see theirs.
+
+Class: naming. Action: rename the struct's `unknown_vec`/`unknown` to what the
+capture shows (`direction`, `flag`) with a comment — a code change plus rebuild,
+scheduled rather than done here.
+
+### F10 — the capture recorded a useless build identifier
+
+The tool read the client "build" from the executable's version resource, which reads
+`1.0.0.1` on this install while the tooling documents itself against build `39112`.
+
+Class: bug (tooling). Action: fixed — the capture header now records
+`sha256` + `file_version` + `size`, and the hash is what identifies a build.

@@ -152,54 +152,70 @@ def write_record(handle, record: dict) -> None:
     handle.write(json.dumps(record, separators=(",", ":")) + "\n")
 
 
-def client_build(exe_path: str | None) -> str | None:
-    """Read the ``FileVersion`` of the client, so a capture states its build.
+def exe_identity(exe_path: str | None) -> dict:
+    """Identify the client executable, because that is what a capture must state.
 
     Offsets and packet layouts are build-specific (`06-client-tooling.md`), so a
-    capture without a build is not evidence of anything. Degrades to ``None``.
+    capture with no client identity is not evidence of anything. The version
+    resource cannot be trusted for this: on the reference install
+    (`F:\\GW\\GW1\\Gw.exe`) it reads `1.0.0.1`, while the build the tooling documents
+    itself against is `39112`. So the **hash** is what identifies the build, and the
+    version string is recorded beside it for the human reader.
     """
+    identity = {"path": exe_path, "file_version": None, "sha256": None, "size": None}
     if not exe_path:
-        return None
+        return identity
+
+    try:
+        import hashlib
+
+        digest = hashlib.sha256()
+        with open(exe_path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        identity["sha256"] = digest.hexdigest()
+        identity["size"] = os.path.getsize(exe_path)
+    except Exception:  # noqa: BLE001 - an unreadable exe must not fail a capture
+        pass
+
     try:
         import ctypes
         from ctypes import wintypes
 
         version = ctypes.WinDLL("version")
         size = version.GetFileVersionInfoSizeW(exe_path, None)
-        if not size:
-            return None
-        buffer = ctypes.create_string_buffer(size)
-        if not version.GetFileVersionInfoW(exe_path, 0, size, buffer):
-            return None
-        value = ctypes.c_void_p()
-        length = wintypes.UINT()
-        if not version.VerQueryValueW(
-            buffer, "\\", ctypes.byref(value), ctypes.byref(length)
-        ):
-            return None
+        if size:
+            buffer = ctypes.create_string_buffer(size)
+            if version.GetFileVersionInfoW(exe_path, 0, size, buffer):
+                value = ctypes.c_void_p()
+                length = wintypes.UINT()
+                if version.VerQueryValueW(
+                    buffer, "\\", ctypes.byref(value), ctypes.byref(length)
+                ):
+                    class FixedFileInfo(ctypes.Structure):
+                        _fields_ = [
+                            ("signature", wintypes.DWORD),
+                            ("struc_version", wintypes.DWORD),
+                            ("file_version_ms", wintypes.DWORD),
+                            ("file_version_ls", wintypes.DWORD),
+                            ("product_version_ms", wintypes.DWORD),
+                            ("product_version_ls", wintypes.DWORD),
+                            ("flags_mask", wintypes.DWORD),
+                            ("flags", wintypes.DWORD),
+                            ("os", wintypes.DWORD),
+                            ("type", wintypes.DWORD),
+                            ("subtype", wintypes.DWORD),
+                            ("date_ms", wintypes.DWORD),
+                            ("date_ls", wintypes.DWORD),
+                        ]
 
-        class FixedFileInfo(ctypes.Structure):
-            _fields_ = [
-                ("signature", wintypes.DWORD),
-                ("struc_version", wintypes.DWORD),
-                ("file_version_ms", wintypes.DWORD),
-                ("file_version_ls", wintypes.DWORD),
-                ("product_version_ms", wintypes.DWORD),
-                ("product_version_ls", wintypes.DWORD),
-                ("flags_mask", wintypes.DWORD),
-                ("flags", wintypes.DWORD),
-                ("os", wintypes.DWORD),
-                ("type", wintypes.DWORD),
-                ("subtype", wintypes.DWORD),
-                ("date_ms", wintypes.DWORD),
-                ("date_ls", wintypes.DWORD),
-            ]
+                    info = ctypes.cast(value, ctypes.POINTER(FixedFileInfo)).contents
+                    ms, ls = info.file_version_ms, info.file_version_ls
+                    identity["file_version"] = f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+    except Exception:  # noqa: BLE001 - a missing version string is not worth failing
+        pass
 
-        info = ctypes.cast(value, ctypes.POINTER(FixedFileInfo)).contents
-        ms, ls = info.file_version_ms, info.file_version_ls
-        return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
-    except Exception:  # noqa: BLE001 - a missing build is not worth failing a capture
-        return None
+    return identity
 
 
 # --------------------------------------------------------------------------- #
@@ -254,6 +270,7 @@ def run_capture(args) -> int:
     )
 
     client = py4gw.connect(target)
+    identity = exe_identity(target.get("path"))
     started = time.time()
     counts: dict[str, int] = {}
     seq = 0
@@ -268,8 +285,7 @@ def run_capture(args) -> int:
                 "client": {
                     "pid": int(target["pid"]),
                     "name": target.get("name"),
-                    "path": target.get("path"),
-                    "build": client_build(target.get("path")),
+                    **identity,
                 },
                 "directions": args.dir,
                 "header_filter": sorted(headers) if headers else None,
@@ -284,7 +300,8 @@ def run_capture(args) -> int:
 
             SNIFFER.initialize(args.dir)
             print(f"--- capturing {args.dir} from pid {target['pid']} "
-                  f"(build {client_build(target.get('path'))}) -> {out}")
+                  f"(client sha256 {(identity['sha256'] or '?')[:16]}, "
+                  f"version {identity['file_version']}) -> {out}")
 
             deadline = started + args.seconds if args.seconds else None
             try:
