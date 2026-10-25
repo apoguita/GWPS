@@ -93,7 +93,7 @@ static void GmCommand_ListTargets(GameSrv *srv, uint16_t player_id)
 {
     // Chat first: a command whose answer is only in the server log is a command the
     // tester cannot use from inside the game. The log still gets the full table.
-    char line[180];
+    char line[100];   // stays inside one chat fragment
     size_t used = 0;
     used += (size_t) snprintf(line + used, sizeof(line) - used, "Maps:");
 
@@ -234,4 +234,5 @@ static bool GameSrv_TryHandleGmCommand(GameSrv *srv, uint16_t player_id, slice_u
 
     return false;
 }
+
 

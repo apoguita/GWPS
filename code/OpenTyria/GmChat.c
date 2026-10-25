@@ -45,8 +45,14 @@ void GameSrv_SendChatMessageCore(GameSrv *srv, GameConnection *conn, slice_uint1
         frag.ptr = data.ptr + offset;
         frag.len = min_size_t(data.len - offset, CHAT_MESSAGE_FRAGMENT_MAX_LENGTH);
 
-        size_t size;
-        GameSrvMsg *buffer = GameSrv_BuildChatMessageCoreMsg(srv, data, &size);
+        size_t size = 0;
+        // The fragment, not the whole slice: passing `data` made every fragment carry the
+        // full text, and pushed anything longer than one fragment past the builder's limit.
+        GameSrvMsg *buffer = GameSrv_BuildChatMessageCoreMsg(srv, frag, &size);
+        if (buffer == NULL) {
+            log_error("Refusing to send a chat fragment the builder rejected");
+            return;
+        }
         GameConnection_SendMessage(conn, buffer, size);
     }
 }
@@ -150,6 +156,11 @@ static bool GameSrv_TryHandleGmCommand(GameSrv *srv, uint16_t player_id, slice_u
 // feedback is otherwise invisible: the client shows nothing for a log line, and a
 // command that answers only in the server log is a command the tester cannot use
 // interactively.
+//
+// Length discipline matters here. A chat core message carries at most
+// CHAT_MESSAGE_FRAGMENT_MAX_LENGTH (122) codepoints; longer text has to be split, and
+// anything the builder rejects must never reach the wire -- an oversized message crashed
+// the client the first time /maps used this path.
 void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char *ascii)
 {
     GmPlayer *player;
@@ -162,21 +173,24 @@ void GameSrv_SendSystemChatMessage(GameSrv *srv, uint16_t player_id, const char 
         return;
     }
 
-    uint16_t buffer[200];
-    size_t len = strlen(ascii);
-    if (ARRAY_SIZE(buffer) <= len) {
-        len = ARRAY_SIZE(buffer) - 1;
-    }
-    for (size_t idx = 0; idx < len; ++idx) {
-        buffer[idx] = (uint16_t) (uint8_t) ascii[idx];
-    }
+    // Leave headroom: the client renders the text with a channel prefix.
+    enum { CHUNK = CHAT_MESSAGE_FRAGMENT_MAX_LENGTH - 24 };
+    uint16_t buffer[CHUNK];
 
-    slice_uint16_t text = { .ptr = buffer, .len = len };
-    // The text rides on a Core message; the Server message that follows says which
-    // channel it belongs to. `Channel_Warning` is the on-screen one, which is what a GM
-    // answer should look like -- a Core alone renders nothing on its own.
-    GameSrv_SendChatMessageCore(srv, conn, text);
-    GameSrv_SendChatMessageServer(srv, conn, Channel_Warning);
+    size_t total = strlen(ascii);
+    for (size_t offset = 0; offset < total; offset += CHUNK) {
+        size_t len = min_size_t(total - offset, CHUNK);
+        for (size_t idx = 0; idx < len; ++idx) {
+            buffer[idx] = (uint16_t) (uint8_t) ascii[offset + idx];
+        }
+
+        slice_uint16_t text = { .ptr = buffer, .len = len };
+        // The text rides on a Core message; the Server message that follows says which
+        // channel it belongs to. `Channel_Warning` is the on-screen one, which is what a
+        // GM answer should look like -- a Core alone renders nothing on its own.
+        GameSrv_SendChatMessageCore(srv, conn, text);
+        GameSrv_SendChatMessageServer(srv, conn, Channel_Warning);
+    }
 }
 
 int GameSrv_HandleChatCommand(GameSrv *srv, uint16_t player_id, slice_uint16_t msg)
