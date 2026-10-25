@@ -101,9 +101,39 @@ a finding and scheduled.
 | P4 | `portal.dll` built from `portal/portal.c` and placed next to the client | CMake target `portal` |
 | P5 | `db/database.db` seeded | `./scripts/seed-db.ps1` |
 | P6 | Server builds | `./scripts/build.ps1` |
+| P7 | Py4GW tooling available for capture/verification (optional but strongly recommended) | See `06-client-tooling.md` |
 
 If P1 or P2 is missing, Phase 0 cannot start — that is the first thing to sort
 out, and it is the only true blocker.
+
+## Tooling available for testing
+
+Phase 0 does not have to be eyeballed. We have programmatic access to the real
+client; see `06-client-tooling.md` for the full picture. The two things that
+change this test plan:
+
+**1. The packet sniffer is the oracle.** `PyPacketSniffer` captures both
+directions with header, size, tick and raw bytes
+(`Py4GW_Reforged_Native/include/GW/packet_sniffer/packet_sniffer.h`). So instead
+of "does it look right", a test can be: run a scripted sequence, dump the packet
+log, compare header-by-header against a golden capture. The first divergent
+header is the bug, with a byte offset.
+
+**2. The client's own state is readable.** Agents, players, party, items, map and
+pathing contexts are all exposed, and the shared-memory cache lets a *separate*
+process read them. A test can assert on what the client actually believes,
+not on a screenshot.
+
+Practical effect on the tests below:
+
+- **T3/T7**: record the StoC log; assert the expected header sequence appears.
+- **T9**: use `multibox` instead of launching two clients by hand — repeatable.
+- **T10**: read agent positions from both clients; assert convergence.
+- **T15** becomes scriptable: the log audit is a diff against the golden sequence.
+
+Anything captured must record the `Gw.exe` build it came from, and must be
+sanitised of player names/UUIDs before entering the repo — see the rules in
+`06-client-tooling.md`.
 
 ## The test plan
 

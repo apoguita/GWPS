@@ -16,6 +16,11 @@ They are three different problems that need three different tools:
 | `Gw.exe` / `portal.dll` | Compiled x86 machine code | **Ghidra** (or IDA, Binary Ninja), plus byte-pattern scanning |
 | `Gw.dat` | Archive + serialized data | **A parser you write**, or the ones already in this repo |
 | The wire protocol | Bytes on a socket | Packet capture + `tools/packet.py`, `tools/trace-packets.py` |
+| **A live client** | Ground truth for all of the above | **The Py4GW ecosystem** — see `06-client-tooling.md` |
+
+That last row is the most important one and did not exist when upstream started:
+we can read the client's own tables and intercept its own packets from Python.
+When in doubt, *ask the client* before opening a decompiler.
 
 Ghidra is still genuinely useful to us — just for the first row and the third,
 not the second.
@@ -137,11 +142,29 @@ dump the parsed structures, and compare against the raw `.dat` bytes.
 **This is the single most valuable tool we have for map work**, and it needs no
 Ghidra — just a running client on the map you care about.
 
-## How to find a map's `map_file_id` without Ghidra
+## How to find a map's `map_file_id`
 
-We need, for each Pre-Searing map, the `file_id` whose blob inside `Gw.dat` is
-that map. There is a cheap, fully deterministic way to enumerate every map file in
-the archive:
+**Update: this is no longer a research task.** The Py4GW ecosystem (see
+`06-client-tooling.md`) exposes the client's own `AreaInfo` table, which is
+indexed by map id and carries the packed map file id at `+0x68`:
+
+```c
+// Py4GW_Reforged_Native/include/GW/context/map.h:114-121
+uint32_t file_id;                                                        // +h0068
+uint32_t file_id1() const { return ((file_id - 1) % 0xff00) + 0x100; }
+uint32_t file_id2() const { return ((file_id - 1) / 0xff00) + 0x100; }
+```
+
+`GetMapInfo(map_id)` is literally `GetAreaInfoArray()[map_id]`
+(`src/GW/map/map_methods.cpp:203-213`), so **every** map's file id can be read
+without loading the map. Resolve which of `file_id` / `file_id1()` / `file_id2()`
+matches OpenTyria's `GmMapConfig.map_file_id` by checking the known Kamadan value
+`0x345CC`, then dump the whole table once.
+
+The brute-force method below still has value as an **independent cross-check**
+(it tells you which files in `Gw.dat` the server can actually load, which is a
+different question from "which file does the client think this map is"), and as a
+workshop on the archive format:
 
 1. Walk every `file_id` in the MFT (`FaArchive.c` already has them all in
    `file_hash_table`).
@@ -150,17 +173,6 @@ the archive:
    (`GmMapDataImport.c:32-37`).
 4. Among those, keep the ones that contain chunk `(2 << 28) | ChunkId_Path` —
    i.e. the ones `GmImportMap` can actually load.
-
-That yields the complete set of loadable map files. What is left is only
-**naming** them: matching each blob to a `MapId`. Ways to do that, cheapest first:
-
-- **Correlate with a live client**: load map X in the real client, use
-  `pygw`/`process.py` to read the loaded map's file id out of the client's map
-  context. Direct, exact, and no guessing.
-- **Pathing graph fingerprinting**: each map's pathfinding graph has a
-  characteristic node/portal structure; match against a drawn `draw-map.py` output.
-- **Community references**: the GW community has published map→file-id lists for
-  `Gw.dat` over the years; cross-check candidates instead of trusting them blindly.
 
 Note that step 3/4 also works as a **regression test**: the number of loadable map
 files in a given `Gw.dat` is a stable, checkable number.
@@ -188,8 +200,10 @@ parsers exist.
 
 Before opening Ghidra for anything, check in this order:
 
-1. Is it already implemented in `code/OpenTyria/`? (grep first — this codebase is
+1. Is it a table or a struct the client already has? Read it from the live client
+   with the Py4GW tooling (`06-client-tooling.md`) — fastest and authoritative.
+2. Is it already implemented in `code/OpenTyria/`? (grep first — this codebase is
    ~30k lines and covers more than it looks like)
-2. Can it be observed from a live client with `tools/process.py` + `pygw.py`?
-3. Does a packet capture answer it? (`tools/trace-packets.py`)
-4. Only then: Ghidra on `Gw.exe`.
+3. Can a packet capture answer it? (`PacketSniffer` + `tools/packet.py`)
+4. Can it be observed from a live client with `tools/process.py` + `pygw.py`?
+5. Only then: Ghidra on `Gw.exe`.
