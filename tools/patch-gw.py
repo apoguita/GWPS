@@ -89,6 +89,51 @@ def main(args):
     with open(input_path, 'rb') as f:
         data = f.read()
 
+    # ---- repoint the baked-in ArenaNet hostnames at loopback -------------------
+    #
+    # The address this client actually uses comes from the command line
+    # (`Gw.custom.exe -authsrv 127.0.0.1 -portal 127.0.0.1`), not from this patch. But the
+    # binary still carries the real hostnames for everything else, and on 2026-10-25 a
+    # patched client playing on GWPS was observed holding a live 6112 connection to an
+    # ArenaNet EC2 host -- so "fully detached" was not true, and a real server could push
+    # events into a client we are driving.
+    #
+    # Each string is rewritten in place as `127.0.0.1` padded with NULs, which keeps every
+    # length and section offset intact. A lookup that now fails is the intended outcome.
+    # If the client turns out to need one of these -- the file server is the one to watch,
+    # since it exists to stream missing Gw.dat content -- delete it from this list.
+    HOSTS = (
+        b'Auth1.ArenaNetworks.com',
+        b'File1.ArenaNetworks.com',
+        b'Diag.ArenaNetworks.com',
+        b'bug.arenanetworks.com:6112',
+        b'icmp.arenanetworks.com',
+        b'ArenaNetworks.com',
+        b'account.arena.net',
+    )
+    REPLACEMENT = b'127.0.0.1'
+
+    def is_host_char(b):
+        return (0x30 <= b <= 0x39) or (0x41 <= b <= 0x5a) or (0x61 <= b <= 0x7a) or b in (0x2e, 0x2d)
+
+    print('[+] Searching for baked-in ArenaNet hostnames')
+    host_patches = []
+    for host in HOSTS:
+        start = 0
+        while True:
+            idx = data.find(host, start)
+            if idx < 0:
+                break
+            start = idx + 1
+            # Only complete C strings: not part of a longer hostname, and NUL-terminated.
+            if idx > 0 and is_host_char(data[idx - 1]):
+                continue
+            if idx + len(host) < len(data) and data[idx + len(host)] != 0:
+                continue
+            host_patches.append((idx, host))
+    for (idx, host) in host_patches:
+        print(f'[+] {host.decode():<26} at 0x{idx:X} -> {REPLACEMENT.decode()}')
+
     def patch(data, offset, replace):
         data[offset:offset+len(replace)] = replace
         return data
@@ -99,6 +144,8 @@ def main(args):
     data_mut = patch(data_mut, key_file_pos + 68, public_key.to_bytes(64, byteorder='little'))
     data_mut = patch(data_mut, mutex_patch_file_pos, b'\x31\xC0\x90\x90\x90\x0F\x84')
     data_mut = patch(data_mut, mutex_name_file_pos, b'AN-Futex')
+    for (idx, host) in host_patches:
+        data_mut = patch(data_mut, idx, REPLACEMENT + b'\x00' * (len(host) - len(REPLACEMENT)))
 
     data = bytes(data_mut)
     with open(out_path, 'wb') as f:
