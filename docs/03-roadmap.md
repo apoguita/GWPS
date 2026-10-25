@@ -56,36 +56,42 @@ That is milestone 0: **make Pre-Searing maps real.**
 Blocked on one value per map: **the `map_file_id`**, the key used to fetch the map
 blob from `Gw.dat`.
 
-**That blocker is now downgraded** — see `06-client-tooling.md`. The client holds
-the whole map→file-id table in memory, indexed by map id, in `AreaInfo` at `+0x68`
-(`Py4GW_Reforged_Native/include/GW/context/map.h:114`), reachable for every map
-without loading it. One script produces all ~880 entries; the one open question is
-whether OpenTyria's `map_file_id` is `file_id`, `file_id1()` or `file_id2()` —
-settled by comparing against Kamadan's known `0x345CC`.
+**Status 2026-10-25: the first map is done and the blocker is understood.** Ascalon
+City (pre-Searing) loads — `map_file_id = 0x1B97D`, spawn `(9541.873, 4796.456)`,
+confirmed by a client logging into the GWPS server (see `docs/test-log.md`).
 
-Procedure per map, once the table is dumped:
+The earlier hope that `AreaInfo.file_id` would supply every map at once is **dead**
+(F5): the field reads 0 for Pre-Searing maps even while standing in one. A blob
+carries no map identity either — no name string, and its `name_id` does not appear
+(checked against map 148 and Kamadan). So `map_id → file_id` is **observed once per
+map**, not derived offline.
 
-1. Look up the map's file id in the dumped `map_id → file_id` table.
-2. Add a `GmMapConfig` in `code/OpenTyria/GmMapsConfig.c` with `map_id`,
-   `map_file_id`, and spawn points (spawn coordinates still need to be found — they
-   are *not* in the `AreaInfo` table; see `tools/draw-map.py`).
-3. Add the `case` to `GetMapConfigForMapId`.
-4. Verify: `GameSrv_LoadMap` no longer warns "No config for map … falling back to
-   default".
+Procedure per map, proven end to end on map 148:
 
-Target set for milestone 1, in dependency order (file ids come from the `AreaInfo`
-dump — see `06-client-tooling.md`):
+1. Stand the live client in the map.
+2. `py tools/probe-pathing.py --dump-trapezoids build/<map>.csv` (elevated) — the
+   client's navmesh fingerprint: planes, trapezoid count, bounds.
+3. Match it against `gwdat_pathing Gw.dat --min-size 0` (never filter by compressed
+   size). If the sheet has no match, `gwdat_pathing Gw.dat --find-floats
+   build/<map>.csv` scans all 146 901 ids for the client's own float pairs.
+4. Add a `GmMapConfig` in `code/OpenTyria/GmMapsConfig.c` with `map_id`,
+   `map_file_id`, and the player's own position as a spawn point.
+5. Add the `case` to `GetMapConfigForMapId`.
+6. Verify: `GameSrv_LoadMap` no longer warns "No config for map … falling back to
+   default", and the client lands in the right place.
+
+Target set for milestone 1, in dependency order:
 
 | Map | id | Type | File id |
 |-----|----|------|---------|
-| Ascalon City (pre-Searing) | 148 | outpost | _from AreaInfo dump_ |
-| Ashford Abbey | 164 | outpost | _from AreaInfo dump_ |
-| Lakeside County | 146 | explorable | _from AreaInfo dump_ |
-| Regent Valley (pre-Searing) | 162 | explorable | _from AreaInfo dump_ |
-| Green Hills County | 160 | explorable | _from AreaInfo dump_ |
-| Wizard's Folly | 161 | explorable | _from AreaInfo dump_ |
-| The Catacombs | 145 | explorable | _from AreaInfo dump_ |
-| The Northlands | 147 | explorable | _from AreaInfo dump_ |
+| **Ascalon City (pre-Searing)** | 148 | outpost | **0x1B97D ✅ loads** |
+| Ashford Abbey | 164 | outpost | _one client visit_ |
+| Lakeside County | 146 | explorable | _one client visit_ |
+| Regent Valley (pre-Searing) | 162 | explorable | _one client visit_ |
+| Green Hills County | 160 | explorable | _one client visit_ |
+| Wizard's Folly | 161 | explorable | _one client visit_ |
+| The Catacombs | 145 | explorable | _one client visit_ |
+| The Northlands | 147 | explorable | _one client visit_ |
 
 **Exit criteria:** a character can log in, be spawned at a valid spawn point, and
 see terrain/other players in Ascalon City (pre) and in Lakeside County.

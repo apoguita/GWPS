@@ -2,18 +2,18 @@
 //
 // Why: `GmMapConfig` needs a `map_file_id` per map, and nothing in the client
 // volunteers it (`AreaInfo.file_id` reads 0 for every Pre-Searing map, verified
-// twice Ã¢â‚¬â€ see docs/06-client-tooling.md, finding F5). But the stage-2 `Path` chunk
+// twice ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â see docs/06-client-tooling.md, finding F5). But the stage-2 `Path` chunk
 // of a map blob *is* the navmesh, and the client holds the same navmesh in memory
 // for the map it is standing in. A fingerprint computed from the same blob on both
 // sides therefore identifies the blob without hooking anything.
 //
-// The fingerprint is (plane count, trapezoid count, bounding box) Ã¢â‚¬â€ three numbers
+// The fingerprint is (plane count, trapezoid count, bounding box) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â three numbers
 // that must agree exactly when both sides parsed the same file:
 //
 //   file_id,size,planes,trapezoids,min_x,min_y,max_x,max_y
 //
 // This reuses the server's own importer (`GmImportMap`), so it exercises exactly
-// the path `GameSrv_LoadMap` uses Ã¢â‚¬â€ the same property `gwdat-scan` was built for.
+// the path `GameSrv_LoadMap` uses ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the same property `gwdat-scan` was built for.
 //
 // Build: CMake target `gwdat_pathing`.
 //
@@ -36,11 +36,11 @@ typedef struct {
 //
 // Why: `GmImportMap` reads the 426 RIFF map blobs, and the map the client has
 // loaded is not among them (finding F12). A byte search for the *client's* floats
-// does not care what container the data sits in, so it can name the file id â€” or
+// does not care what container the data sits in, so it can name the file id Ã¢â‚¬â€ or
 // prove the geometry is not in Gw.dat at all.
 //
-// Patterns are consecutive float32 pairs from the client dump â€” (yt,yb),
-// (xtl,xtr), (xbl,xbr) â€” which is how a trapezoid record is laid out. A file that
+// Patterns are consecutive float32 pairs from the client dump Ã¢â‚¬â€ (yt,yb),
+// (xtl,xtr), (xbl,xbr) Ã¢â‚¬â€ which is how a trapezoid record is laid out. A file that
 // matches two or more independent patterns is the map data, not a coincidence.
 // ---------------------------------------------------------------------------
 
@@ -212,6 +212,8 @@ int main(int argc, char **argv)
     size_t max_size = 8u * 1024u * 1024u;
     FILE *trap_out = NULL;
     const char *find_csv = NULL;
+    const char *write_path = NULL;
+    uint32_t write_id = 0;
     bool min_given = false;
 
     for (int idx = 2; idx < argc; ++idx) {
@@ -228,6 +230,11 @@ int main(int argc, char **argv)
             fprintf(trap_out, "file_id,plane,trap_id,xtl,xtr,yt,xbl,xbr,yb\n");
         } else if (strcmp(argv[idx], "--find-floats") == 0 && idx + 1 < argc) {
             find_csv = argv[++idx];
+        } else if (strcmp(argv[idx], "--write") == 0 && idx + 2 < argc) {
+            // Dump one decompressed file verbatim: the way to look *inside* a blob
+            // for what the RIFF chunks do not describe (map name, name id, ...).
+            write_id = (uint32_t) strtoul(argv[++idx], NULL, 0);
+            write_path = argv[++idx];
         } else if (strcmp(argv[idx], "--min-size") == 0 && idx + 1 < argc) {
             min_size = (size_t) strtoul(argv[++idx], NULL, 0);
             min_given = true;
@@ -240,6 +247,28 @@ int main(int argc, char **argv)
     if (FaOpen(&archive, path) != 0) {
         fprintf(stderr, "failed to open '%s'\n", path);
         return 1;
+    }
+
+    if (write_path != NULL) {
+        array_uint8_t content = {0};
+        if (FaGetFile(&archive, write_id, &content) != 0) {
+            fprintf(stderr, "0x%08X: not found\n", write_id);
+            FaClose(&archive);
+            return 1;
+        }
+        FILE *fp = fopen(write_path, "wb");
+        if (fp == NULL) {
+            fprintf(stderr, "cannot write '%s'\n", write_path);
+            array_free(&content);
+            FaClose(&archive);
+            return 1;
+        }
+        fwrite(content.ptr, 1, content.len, fp);
+        fclose(fp);
+        fprintf(stderr, "wrote %zu bytes of 0x%08X to '%s'\n", content.len, write_id, write_path);
+        array_free(&content);
+        FaClose(&archive);
+        return 0;
     }
 
     if (find_csv != NULL) {
@@ -366,5 +395,6 @@ int main(int argc, char **argv)
     FaClose(&archive);
     return 0;
 }
+
 
 

@@ -166,9 +166,16 @@ the path `GameSrv_LoadMap` uses. Results, committed as `data/gwdat-maps.csv`:
 
 - `F:\GW\GW1\Gw.dat` parses: magic `0x1A4E4133` (`FILE_ARCHIVE_MAGIC`),
   `mft_offset 0xD82B9A00`, 155 238 MFT entries, **146 695 file ids**, 3.66 GB.
-- **426 blobs are maps — that is 213 distinct maps, each stored twice**
-  (every size occurs exactly twice; `paired_with` in the CSV records the twin).
-  All are `RIFF_MAP2`, between 427 KB and 4.4 MB decompressed.
+- **594 blobs are maps — that is 297 distinct maps, each stored twice** (every size
+  occurs exactly twice; `paired_with` in the CSV records the twin). All are
+  `RIFF_MAP2`, between 427 KB and 4.4 MB decompressed.
+
+  **Correction, 2026-10-25:** this scan was run with a 4 KB-8 MB window applied to the
+  MFT's *compressed* entry size, and a map compresses far below its decompressed size
+  — Kamadan is 4 980 bytes for 1.7 MB, and Ascalon City (pre) is under 4 KB for 2.9 MB.
+  The window silently dropped 84 maps. Re-run with `--min-size 0` and the counts are
+  594 blobs / 297 maps, which is what `gwdat_pathing` reports. Never
+  select maps by compressed size.
 - Kamadan's blob validates end to end: 24 chunks, and chunk `0x20000008`
   (stage 2, `ChunkId_Path`) begins `4C 70 FE EE 0C 00 00 00` — that is
   `PATH_DATA_SIGNATURE` `0xEEFE704C` and `PATH_DATA_VERSION` 12, the exact
@@ -491,7 +498,7 @@ array walk AreaInfo[148].file_id = 0x00000000
 ```
 
 The 159 entries that *are* populated are legacy PvP/guild-hall infrastructure, and
-**none of them appears in the 426-blob map list** from `data/gwdat-maps.csv`. So
+**none of them appears in the map-blob list** from `data/gwdat-maps.csv`. So
 `file_id` is a different concept, not the map geometry key. It also means the
 `file_id1()`/`file_id2()` decomposition does not lead to map geometry ids.
 

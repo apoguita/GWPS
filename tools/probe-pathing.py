@@ -1,4 +1,4 @@
-"""Fingerprint the map the client is standing in, and find its Gw.dat blob.
+﻿"""Fingerprint the map the client is standing in, and find its Gw.dat blob.
 
 Why
 ---
@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 DEFAULT_PY4GW_ROOT = r"C:\Users\Apo\Py4GW_Stealth"
-DEFAULT_CSV = "build/pathing-fingerprints.csv"
+DEFAULT_CSV = "build/pathing-all.csv"
 
 
 def hx(value: int) -> str:
@@ -179,7 +179,7 @@ def main(argv: list[str]) -> int:
                   "blobs; re-run gwdat_pathing over the full size range.", file=sys.stderr)
             return 4
 
-        print(f"\n{len(matches)} matching blob(s) — a map is stored twice, so two is the expected "
+        print(f"\n{len(matches)} matching blob(s) â€” a map is stored twice, so two is the expected "
               f"answer:")
         for row in matches:
             print(f"  file_id {row['file_id']}  size={row['size']}  "
@@ -197,3 +197,4 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
+

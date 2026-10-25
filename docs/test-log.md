@@ -520,3 +520,50 @@ Spawn point = where the live client stood (`Player.GetXY()`). The plane is
 `db/database.db` now has the existing character's `last_outpost = 148`, and
 `gwps_server.exe` rebuilds and binds 6112/6113/1337. **Not yet exercised:** a client
 logging into our server and standing in Ascalon City (pre). That is the next test.
+
+---
+
+## T7-variant — load a Pre-Searing map — **PASS** — 2026-10-25 — `13d040b`
+
+Tester launched the patched client against the GWPS server with the character's
+`last_outpost = 148` and **loaded into Ascalon City (pre-Searing)**. Milestone 1's
+first map is real.
+
+What this proves:
+
+- `map_file_id = 0x1B97D` is correct — the server found the blob, `GmImportMap`
+  parsed it, and the client accepted the instance rather than falling back to Kamadan.
+- The spawn point `(9541.873, 4796.456)` is inside the map's walkable area.
+- The float-search identification method works end to end, not just in the file dump.
+
+What it does **not** yet prove:
+
+- that the spawn **plane** (assumed 0, unverified) is right — the tester was not
+  asked to check for a visible vertical displacement;
+- anything about the other seven Pre-Searing maps.
+
+### The repeatable procedure this establishes
+
+Per map, and it is now mechanical:
+
+1. Stand the live client in the map.
+2. `py tools/probe-pathing.py --dump-trapezoids build/<map>.csv` (elevated) — prints
+   the client's fingerprint and, once the sheet covers the whole archive, the matching
+   blob directly.
+3. Fall back to `gwdat_pathing Gw.dat --find-floats build/<map>.csv` when the sheet
+   has no match: float pairs straight from the client, scanned across all 146 901 ids.
+   It found map 148 in one pass after the fingerprint approach was mistuned.
+4. Add the `GmMapConfig` entry with the file id and the player's own position as the
+   spawn point.
+
+**Do not filter the archive by compressed MFT size when hunting maps.** That mistake
+cost two wrong findings (F11, F12) in this session: Kamadan compresses to 4 980 bytes
+for 1.7 MB, and map 148 to under 4 KB of its 2.9 MB. Use `--min-size 0`.
+
+### Note on why blob content cannot shortcut this
+
+A blob carries no map identity: map 148's `name_id` (10478) appears once by
+coincidence inside an index table of small integers, and Kamadan's `name_id` (24707)
+does not appear at all. There are no map-name strings either (no `Ascalon`, in ASCII or
+UTF-16). So `map_id -> file_id` is not derivable offline from the archive; it has to be
+observed once per map.
