@@ -319,10 +319,13 @@ typedef struct GameSrv_HardModeUnlocked {
     uint8_t  hard_mode_unlocked;
 } GameSrv_HardModeUnlocked;
 
+// Captured 2026-10-25: 99000000 | a1000000 | 00000000 -- 4-byte header, then the map id
+// and an unknown as DWORDs (12 bytes total). Ours was header + WORD + BYTE = 5 bytes, and
+// sending that to a client being redirected crashed it.
 typedef struct GameSrv_UpdateCurrentMap {
     uint16_t header;
-    uint16_t map_id;
-    uint8_t  unk;
+    uint32_t map_id;
+    uint32_t unk;
 } GameSrv_UpdateCurrentMap;
 
 typedef struct GameSrv_InstanceManifestData {

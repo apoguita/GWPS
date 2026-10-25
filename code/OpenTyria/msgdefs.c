@@ -2819,9 +2819,9 @@ MsgField GAME_SMSG_0152[5] = {
 };
 
 MsgField GAME_SMSG_0153[3] = {
-    {TYPE_MSG_HEADER, 153},
-    {TYPE_WORD, 0},
-    {TYPE_BYTE, 0},
+    {TYPE_MSG_HEADER_GAME, 153},
+    {TYPE_DWORD, 0},   // map id
+    {TYPE_DWORD, 0},   // unknown, 0 in the capture
 };
 
 MsgField GAME_SMSG_0154[3] = {
@@ -5541,7 +5541,7 @@ MsgFormat GAME_SMSG_FORMATS[488] = {
     {150, 6,  GAME_SMSG_0150, 22},
     {151, 3,  GAME_SMSG_0151, 263},
     {152, 5,  GAME_SMSG_0152, 15},
-    {153, 3,  GAME_SMSG_0153, 5},
+    {153, 3,  GAME_SMSG_0153, 10},
     {154, 3,  GAME_SMSG_0154, 10},
     {155, 3,  GAME_SMSG_0155, 74},
     {156, 3,  GAME_SMSG_0156, 10},
