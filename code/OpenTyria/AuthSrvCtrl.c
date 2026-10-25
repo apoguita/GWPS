@@ -32,9 +32,30 @@ int AuthSrvCtrl_FindCompatibleGameSrv(AuthSrv *srv, GmDistrict district, size_t 
         }
     }
 
-    // Nothing matched. Say what was asked for and what exists: a new server for a map
-    // that already has one is either a district mismatch or a bug, and guessing which
-    // costs a test cycle.
+    // Strict matching failed. Before creating a twin, fall back to the map itself: on a
+    // single-region private server, one server per map IS the invariant, and a district
+    // field that drifted through a chain of teleports should not be allowed to duplicate
+    // a map. Observed 2026-10-25: map 148 had two servers because the strict comparison
+    // of region/language/map_type/district_number failed somewhere in that chain.
+    for (size_t idx = 0; idx < n_games; ++idx) {
+        GameSrvMetadata *metadata = &srv->games[idx];
+        if (metadata->district.map_id == district.map_id &&
+            metadata->district.map_type == district.map_type) {
+            log_warn("Reusing server %u for map %d by map id alone: its district differs "
+                     "(type %d vs %d, region %d vs %d, language %d vs %d, district %u vs %u)",
+                     metadata->server_id, (int) district.map_id,
+                     (int) metadata->district.map_type, (int) district.map_type,
+                     (int) metadata->district.region, (int) district.region,
+                     (int) metadata->district.language, (int) district.language,
+                     metadata->district.district_number, district.district_number);
+            *result = idx;
+            return ERR_OK;
+        }
+    }
+
+    // Nothing matched even loosely. Say what was asked for and what exists: a new server
+    // for a map that already has one is either a district mismatch or a bug, and guessing
+    // which costs a test cycle.
     log_info("No compatible server for map %d (district %u, type %d, region %d, language "
              "%d); %zu server(s) exist:", (int) district.map_id, district.district_number,
              (int) district.map_type, (int) district.region, (int) district.language, n_games);
