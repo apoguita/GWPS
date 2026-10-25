@@ -108,6 +108,27 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# Host tool: enumerate the map blobs inside Gw.dat (tools/gwdat-scan.c).
+# Compiles the whole library with COMPILE_TOOLS so build_open_tyria.c skips
+# main.c and the tool supplies its own.
+# ---------------------------------------------------------------------------
+add_executable(gwdat_scan "${PRESEARING_ROOT}/tools/gwdat-scan.c")
+target_include_directories(gwdat_scan PRIVATE
+    "${OT_SRC_DIR}"
+    "${PRESEARING_ROOT}/deps/mbedtls-3.6.0/include")
+target_link_libraries(gwdat_scan PRIVATE presearing_sqlite mbedtls)
+if(WIN32)
+    target_link_libraries(gwdat_scan PRIVATE Ws2_32 bcrypt ntdll)
+else()
+    target_link_libraries(gwdat_scan PRIVATE pthread m)
+endif()
+if(MSVC)
+    target_compile_options(gwdat_scan PRIVATE /W0)
+else()
+    target_compile_options(gwdat_scan PRIVATE -w)
+endif()
+
+# ---------------------------------------------------------------------------
 # portal.dll -- injected into the Guild Wars client to stand in for the real
 # ArenaNet portal. Self-contained Windows DLL; required before any client test
 # can run (see docs/04-scope.md, prerequisite P4).

@@ -158,6 +158,56 @@ four that were missing from the hand-written list in `03-roadmap.md`:
 149/150/151 are the Ascalon Academy mission chain, which `03-roadmap.md` lists as
 out of scope. 408–412 and 779 need identifying before they join the target set.
 
+### What the archive scan proved (2026-10-24)
+
+`tools/gwdat-scan.c` (CMake target `gwdat_scan`) reuses the server's own
+`FaOpen`/`FaGetFile`/`FaCompress`/`RiffParseChunks` code, so it exercises exactly
+the path `GameSrv_LoadMap` uses. Results, committed as `data/gwdat-maps.csv`:
+
+- `F:\GW\GW1\Gw.dat` parses: magic `0x1A4E4133` (`FILE_ARCHIVE_MAGIC`),
+  `mft_offset 0xD82B9A00`, 155 238 MFT entries, **146 695 file ids**, 3.66 GB.
+- **426 blobs are maps — that is 213 distinct maps, each stored twice**
+  (every size occurs exactly twice; `paired_with` in the CSV records the twin).
+  All are `RIFF_MAP2`, between 427 KB and 4.4 MB decompressed.
+- Kamadan's blob validates end to end: 24 chunks, and chunk `0x20000008`
+  (stage 2, `ChunkId_Path`) begins `4C 70 FE EE 0C 00 00 00` — that is
+  `PATH_DATA_SIGNATURE` `0xEEFE704C` and `PATH_DATA_VERSION` 12, the exact
+  constants `GmMapDataImport.c:5-6` asserts. The archive reader and decompressor
+  are correct.
+
+**Three of the six shipped `GmMapConfig` entries are wrong.** They exist in the
+MFT but are *not* map blobs:
+
+| map | shipped `map_file_id` | in MFT | RIFF map blob? |
+|-----|----------------------|--------|----------------|
+| Kamadan, Jewel of Istan | `0x345CC` | yes | **yes** (1 734 079 B, 24 chunks) |
+| Domain of Anguish | `0x3584F` | yes | **yes** (3 104 279 B, 23 chunks) |
+| Sparkfly Swamp | `0x46305` | yes | **yes** (3 465 034 B, 25 chunks) |
+| Lion's Arch | `0x56228` | yes | **no** |
+| Kaineng Center | `0x265F7` | yes | **no** |
+| Lornar's Pass | `0xB602` | yes | **no** |
+
+That is a real upstream bug, and it independently justifies the Phase 0 decision
+to verify on **Kamadan** — it is the only outpost whose config actually loads.
+
+### Still open: assigning blob ids to map ids
+
+Do not assume `AreaInfo.file_id` is always the map geometry id. For the guild
+halls (map ids 4–9) it resolved to entries like `0x1F4B7` with `stream = 0` and a
+size of ~31 KB — far too small to be a map blob. So `AreaInfo.file_id` is a
+*related* identifier, not a guaranteed alias, and it is lazily populated anyway.
+
+The clean way to close this is direct observation: `Gw.exe` opens each map with
+`OpenFileByFileId(archive, file_id, stream_id, flags, &error)` — already resolved
+in Py4GW_Reforged_Native as `g_open_file_by_file_id_func`
+(`include/GW/textures/gw_dat_reader.h:42,65`). Hook that, load a map, and the
+exact `map_id -> file_id -> stream` triple falls out. That needs no guessing and
+no Ghidra.
+
+The cheap approximation, if a hook is more than we want right now: travel to a
+map and read `AreaInfo[map_id].file_id`, then check the value against
+`data/gwdat-maps.csv` — an id absent from that file is not a map blob.
+
 ### What is still missing
 
 `Context::GetAreaInfoArray()` exists natively (`src/GW/context/context_methods.cpp:128`)

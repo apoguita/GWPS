@@ -110,3 +110,39 @@ Findings:
 
 Next: close the client and parse `Gw.dat` to get every archive file id in one
 pass, or travel to each map and let the dump merge.
+
+---
+
+## Gw.dat archive scan — PASS — 2026-10-24 — `55f31ba`
+
+Client was closed to release its exclusive lock on `F:\GW\GW1\Gw.dat`.
+
+Command:
+```powershell
+cmake --build build --config RelWithDebInfo --target gwdat_scan
+.\build\RelWithDebInfo\gwdat_scan.exe F:\GW\GW1\Gw.dat > build\maps-scan.csv
+```
+
+Observed:
+- Archive parses: magic `0x1A4E4133`, `mft_offset 0xD82B9A00`, 155238 MFT
+  entries, 146695 file ids, 3.66 GB.
+- 75 656 entries in the 4 KB-8 MB size window were decompressed; **426 are
+  RIFF map blobs = 213 maps x 2 copies** (every size appears exactly twice).
+- Kamadan `0x345CC` decompresses to 1 734 079 B, `RIFF_MAP2`, 24 chunks, and
+  chunk `0x20000008` (stage 2 Path) starts `4C70FEEE 0C000000` =
+  `PATH_DATA_SIGNATURE` / `PATH_DATA_VERSION`. Full reader + decompressor path
+  validated against the server's own code.
+- Results committed as `data/gwdat-maps.csv`.
+
+Findings:
+- F3 — **Three shipped `GmMapConfig` entries are not map blobs.** Lion's Arch
+  `0x56228`, Kaineng Center `0x265F7` and Lornar's Pass `0xB602` all exist in the
+  MFT but are not RIFF maps, so `GameSrv_LoadMap` would fail on them. Kamadan,
+  Domain of Anguish and Sparkfly Swamp are correct. Class: bug (upstream data).
+  Action: replace those three values, or drop the configs.
+- F4 — `AreaInfo.file_id` is not a guaranteed alias for the map geometry id: for
+  guild halls it resolved to a ~31 KB stream-0 entry, not a map blob. Class:
+  by-design (different identifier). Action: observe `OpenFileByFileId` instead.
+
+Still open: assigning blob ids to map ids for Pre-Searing. See
+`06-client-tooling.md` -> "Still open".

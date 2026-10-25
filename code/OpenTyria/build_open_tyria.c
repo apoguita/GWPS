@@ -136,7 +136,10 @@
 #include "AuthMsg.h"
 #include "AuthSrv.h"
 
-#if !defined(COMPILE_TESTS)
+#if defined(COMPILE_TOOLS)
+// A host tool (e.g. tools/gwdat-scan.c) supplies its own main() and uses all of
+// the library code below as-is. Keeps the single-translation-unit build intact.
+#elif !defined(COMPILE_TESTS)
 #include "main.c"
 #endif
 
