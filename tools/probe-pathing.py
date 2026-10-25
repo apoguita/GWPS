@@ -21,6 +21,19 @@ Needs an elevated shell
 dispatcher, hooks). Start PowerShell as administrator and approve the UAC prompt.
 Unelevated the script prints the reason and exits 2. Nothing here changes the game.
 
+Which client to point it at
+---------------------------
+The client whose game server actually has the map loaded:
+
+* **A map GWPS has no config for** -> the **live** client (plain `Gw.exe`, ArenaNet's
+  server). GWPS cannot host such a map: `GameSrv_LoadMap` has no `GmMapConfig` and
+  falls back to Kamadan, so a probe against our server would report map 449.
+* **Verifying a config that exists** -> the patched client (`Gw.custom.exe` with
+  `portal.dll`, `-authsrv 127.0.0.1`), which is what proves our blob and spawn point.
+
+If both clients are running, `--list` shows them and `--pid` picks one. The map id in
+the output is the check: 449 means the fallback happened and you are on the wrong side.
+
 Usage
 -----
     py tools/probe-pathing.py --list                  # no elevation, no client needed
