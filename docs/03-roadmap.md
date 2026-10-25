@@ -93,12 +93,17 @@ Target set for milestone 1, in dependency order:
 |-----|----|------|---------|
 | **Ascalon City (pre-Searing)** | 148 | outpost | **0x1B97D ✅ loads** |
 | **Lakeside County** | 146 | explorable | **0x1B97D ✅ loads (shared blob)** |
-| Ashford Abbey | 164 | outpost | _try 0x1B97D first_ |
-| Regent Valley (pre-Searing) | 162 | explorable | _try 0x1B97D first_ |
-| Green Hills County | 160 | explorable | _try 0x1B97D first_ |
-| Wizard's Folly | 161 | explorable | _try 0x1B97D first_ |
-| The Catacombs | 145 | explorable | _try 0x1B97D first_ |
-| The Northlands | 147 | explorable | _try 0x1B97D first_ |
+| **The Catacombs** | 145 | explorable | **0x5CEE6** — own blob, config added, not yet loaded |
+| Ashford Abbey | 164 | outpost | _unread_ |
+| Regent Valley (pre-Searing) | 162 | explorable | _unread_ |
+| Green Hills County | 160 | explorable | _unread_ |
+| Wizard's Folly | 161 | explorable | _unread_ |
+| The Northlands | 147 | explorable | _unread_ |
+
+**Sharing is per region, not global.** Ascalon City and Lakeside County share
+`0x1B97D`; The Catacombs does not — it reads 51 planes / 5246 trapezoids and matches
+`0x5CEE6` (twin `0x1C530`). So the value has to be *read* per map; it cannot be
+extrapolated from a neighbour.
 
 **Exit criteria (met 2026-10-25):** a character can log in, be spawned at a valid spawn
 point, and see terrain in Ascalon City (pre) **and** in Lakeside County.

@@ -143,6 +143,8 @@ def main(argv):
     parser.add_argument("--pid", type=int, default=None)
     parser.add_argument("--list", action="store_true",
                         help="list candidate clients (pid, name, path) and exit")
+    parser.add_argument("--game-thread", action="store_true",
+                        help="install the game-thread hooks (a write); off by default")
     args = parser.parse_args(argv)
 
     root = Path(args.py4gw_root)
@@ -185,7 +187,18 @@ def main(argv):
 
     report = {"client": {"pid": int(clients[0]["pid"]), "name": clients[0].get("name"),
                          "path": clients[0].get("path")}}
-    client = py4gw.connect(clients[0])
+    # Read-only by default. `game_thread=True` installs hooks, and on a 32-bit
+    # controller that path dies in `list_modules` -- module handles in a 64-bit client
+    # exceed 32 bits, and ctypes refuses the argument
+    # ("OverflowError: int too long to convert"). This tool only reads, so it does not
+    # need the hooks; --game-thread opts back in.
+    try:
+        client = py4gw.connect(clients[0], game_thread=args.game_thread)
+    except OverflowError as exc:
+        print("could not connect: {} -- this usually means a 32-bit Python is reading "
+              "module handles from the 64-bit client. Run without --game-thread, or use a "
+              "64-bit interpreter.".format(exc), file=sys.stderr)
+        return 3
     try:
         map_id = int(Map.GetMapID() or 0)
         if not map_id:

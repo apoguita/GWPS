@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 GmMapConfig s_KamadanJewelOfIstanOutpost = {
     .map_id = MapId_KamadanJewelOfIstanOutpost,
@@ -54,6 +54,23 @@ GmMapConfig s_LakesideCounty = {
     },
 };
 
+// The Catacombs, map id 145 -- 2026-10-25, spawn point read from the live client.
+//
+// Unlike Ascalon City and Lakeside County, this map does NOT share blob 0x1B97D: the
+// client standing in it reports 51 planes / 5246 trapezoids / bounds
+// (-21504,-27648)..(21504,20736), which match two archive entries -- 0x5CEE6 and
+// 0x1C530 (3 320 363 bytes each, the two stored copies). So the sharing is per region,
+// not global to the tutorial: some Pre-Searing maps agree, some do not, and each has to
+// be read (see docs/test-log.md).
+GmMapConfig s_Catacombs = {
+    .map_id = MapId_TheCatacombs,
+    .map_file_id = 0x5CEE6,
+    .n_spawnpoints = 1,
+    .spawnpoints = {
+        { 14442.f, 2135.f, 0 },
+    },
+};
+
 GmMapConfig s_KainengCenterOutpost = {
     .map_id = MapId_KainengCenterOutpost,
     .map_file_id = 0x265F7,
@@ -88,6 +105,8 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return &s_AscalonCityPreSearing;
     case MapId_LakesideCounty:
         return &s_LakesideCounty;
+    case MapId_TheCatacombs:
+        return &s_Catacombs;
     case MapId_KainengCenterOutpost:
         return &s_KainengCenterOutpost;
     case MapId_LionsArchOutpost:
@@ -102,4 +121,5 @@ GmMapConfig* GetMapConfigForMapId(MapId map_id)
         return NULL;
     }
 }
+
 
