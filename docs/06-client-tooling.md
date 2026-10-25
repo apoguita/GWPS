@@ -360,6 +360,46 @@ lengths are **total bytes on the wire, 4-byte header word included**.
   Do not run both sniffers at once, and treat an entry mismatch as *another
   runtime's*, not as a failed restore.
 
+#### The capture front end: `tools/sniff-capture.py`
+
+The sniffer is a log, not a file format. `tools/sniff-capture.py` is the small front
+end that turns it into a capture: connect, start the requested half, drain until the
+window closes, put everything back, and write JSONL.
+
+```powershell
+# run from an ELEVATED shell; the tool refuses otherwise (exit 2)
+py tools/sniff-capture.py --seconds 30 --dir StoC --header 0x3D,0x3E
+py tools/sniff-capture.py --seconds 0  --dir both --out captures/walk.jsonl   # until Ctrl+C
+py tools/sniff-capture.py --self-test                                          # no client, no UAC
+```
+
+Why it drains instead of reading once: the client-side log is a **ring** with a
+fixed cap (`K_MAX_LOGS = 10000`), and the oldest entry is dropped first — so a long
+session would silently truncate itself. The tool reads, **clears**, and repeats, and
+therefore produces a complete file no matter how long it runs.
+
+It sanitises by default, per the rules of engagement below: the payload of the 15
+`NAME_RE_STOC_HEADERS` is dropped whole, and every other UTF-16LE run of six or more
+printable characters is zeroed with its `[offset, length]` recorded in `masked`, so
+masked and unmasked captures still line up field for field. `--raw` disables all of
+it and prints a warning; a raw capture is never committed. `captures/` is gitignored
+for the same reason.
+
+Each line is one JSON object. The first is the capture header — client pid, path,
+**build** (read from the executable's version resource, not assumed), direction,
+filter, and whether it was sanitised. The rest are packets:
+
+```json
+{"seq":2,"t":0.0,"direction":"CToS","header":61,"name":"POSITION_UPDATE",
+ "size":28,"data":"3d000000000080400000804000000000000000000000000000000000",
+ "redacted":null,"masked":[]}
+```
+
+Status: the sanitiser and writer are covered by `--self-test` (11 checks), and the
+drain/clear/terminate/disconnect loop was exercised offline against a stand-in
+`py4gw` package. **The live run is still owed** — it needs an elevated shell and a
+running client, and it is the first thing to do the next time a client is up.
+
 #### What GWPS should use it for first
 
 The `0x3D` position stream (finding F7) is the obvious first target: our handler

@@ -138,7 +138,8 @@ Practical effect on the tests below:
 
 Anything captured must record the `Gw.exe` build it came from, and must be
 sanitised of player names/UUIDs before entering the repo — see the rules in
-`06-client-tooling.md`.
+`06-client-tooling.md`. Captures are produced by `tools/sniff-capture.py`, which
+sanitises by default and records the client build in the capture header.
 
 ## The test plan
 

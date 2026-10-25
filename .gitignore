@@ -40,6 +40,9 @@ Gw.dat
 config.local.*
 keys.txt
 keys.local.txt
+# Packet captures from tools/sniff-capture.py. Even sanitised, these are working
+# files; a golden capture gets committed deliberately and reviewed first.
+captures/
 user/
 logs/
 *.log
