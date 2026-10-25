@@ -28,6 +28,7 @@ actually playable, and make the server underneath it operable and survivable.
 | [`docs/04-scope.md`](docs/04-scope.md) | **Current scope** — Phase 0 verification test plan, what works vs what doesn't |
 | [`docs/05-reverse-engineering.md`](docs/05-reverse-engineering.md) | Which tool for which job (Ghidra is for `Gw.exe`, not `Gw.dat`) |
 | [`docs/06-client-tooling.md`](docs/06-client-tooling.md) | The Py4GW ecosystem: packet sniffer, client state, and how we read `map_file_id` |
+| [`docs/07-packet-scope.md`](docs/07-packet-scope.md) | **Packet classification** — statuses, scope tiers, source precedence, and the generated catalogue |
 | [`docs/adr/`](docs/adr/) | Why we forked, why CMake, and later decisions |
 | [`docs/upstream/README.OpenTyria.md`](docs/upstream/README.OpenTyria.md) | Upstream's original README, preserved |
 

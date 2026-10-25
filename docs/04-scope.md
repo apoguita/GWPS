@@ -129,6 +129,13 @@ pathing contexts are all exposed, and the shared-memory cache lets a *separate*
 process read them. A test can assert on what the client actually believes,
 not on a screenshot.
 
+**3. T15 has a generated answer.** `docs/07-packet-scope.md` defines how every
+header is categorised, and `tools/packet-catalog.py` produces
+`data/packet-catalog.csv` — status, both client names, our name, expected and
+observed sizes — by joining `msgdefs`, `opcodes.h`, the dispatch switches, the
+client's tables and a capture. The manual grep in T15 is the fallback, not the
+method.
+
 Practical effect on the tests below:
 
 - **T3/T7**: record the StoC log; assert the expected header sequence appears.
