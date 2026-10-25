@@ -33,7 +33,12 @@ Gw.dat
 *.db-wal
 *.db-shm
 # Local config and per-deployment DH keys
+# keys.txt is this deployment's DH prime/private/public, produced by
+# tools/gen-dhm-keys.py. It is machine-specific and must never be published.
+# (The same default values also live in code/OpenTyria/main.c:32,38 --
+# tracked as docs/03-roadmap.md milestone 2, item 1.)
 config.local.*
+keys.txt
 keys.local.txt
 user/
 logs/
