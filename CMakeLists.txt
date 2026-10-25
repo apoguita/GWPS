@@ -128,6 +128,22 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# gwps_dns -- loopback DNS responder used by the "closed" network mode
+# (docs/09-client-connections.md, tools/dns-gwps.ps1).
+#
+# The client builds its file-server names itself and resolves some of them through a path that
+# ignores the hosts file, so answering the lookup is the only way to keep it on this machine.
+# Standalone: no part of the server depends on it, and the default install does not run it.
+# ---------------------------------------------------------------------------
+if(WIN32)
+    add_executable(gwps_dns "${GWPS_ROOT}/tools/gwps_dns.c")
+    target_link_libraries(gwps_dns PRIVATE Ws2_32)
+    if(MSVC)
+        target_compile_options(gwps_dns PRIVATE /W3)
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # Host tool: enumerate the map blobs inside Gw.dat (tools/gwdat-scan.c).
 # Compiles the whole library with COMPILE_TOOLS so build_open_tyria.c skips
 # main.c and the tool supplies its own.

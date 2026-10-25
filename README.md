@@ -29,6 +29,8 @@ actually playable, and make the server underneath it operable and survivable.
 | [`docs/05-reverse-engineering.md`](docs/05-reverse-engineering.md) | Which tool for which job (Ghidra is for `Gw.exe`, not `Gw.dat`) |
 | [`docs/06-client-tooling.md`](docs/06-client-tooling.md) | The Py4GW ecosystem: packet sniffer, client state, and how we read `map_file_id` |
 | [`docs/07-packet-scope.md`](docs/07-packet-scope.md) | **Packet classification** — statuses, scope tiers, source precedence, and the generated catalogue |
+| [`docs/08-gm-commands.md`](docs/08-gm-commands.md) | `/tp`, `/maps`, and the teleport path end to end |
+| [`docs/09-client-connections.md`](docs/09-client-connections.md) | **What the client connects to** — the game connections, ArenaNet's file servers, and the open/closed network modes |
 | [`docs/adr/`](docs/adr/) | Why we forked, why CMake, and later decisions |
 | [`docs/upstream/README.OpenTyria.md`](docs/upstream/README.OpenTyria.md) | Upstream's original README, preserved |
 
@@ -96,6 +98,31 @@ config-file work in milestone 2):
 3. Launch: `Gw.custom.exe -authsrv 127.0.0.1 -portal 127.0.0.1`
 4. Log in with a seeded account: `user1@example.com`, `user2@example.com`, or
    `user3@example.com`
+
+### Network mode (open by default)
+
+The client keeps up to three connections to **ArenaNet's file servers** while playing, for a
+file/version check. That is normal and expected. GWPS serves all gameplay on loopback and needs
+nothing from that exchange, so **the default is open** — nothing to configure, and a retail
+client on the same machine is unaffected. Full detail, including what each socket carries:
+[`docs/09-client-connections.md`](docs/09-client-connections.md).
+
+If you want those connections closed as well (a machine dedicated to GWPS, or no traffic to
+ArenaNet at all), build the responder once and toggle it:
+
+```powershell
+cmake --build build --config RelWithDebInfo --target gwps_dns
+.\tools\dns-gwps.ps1 -Enable     # elevated: runs gwps_dns on 127.0.0.1:53 and points the adapter at it
+.\tools\dns-gwps.ps1 -Status
+.\tools\dns-gwps.ps1 -Disable    # restores the adapter's original DNS and stops the responder
+```
+
+This mode is **machine-wide**: while it is on, a retail client on the same machine would also be
+redirected and fail to log in. Disable it before playing retail. The adapter's previous DNS
+servers are saved and restored by `-Disable`.
+
+`tools/hosts-gwps.ps1` also exists, but only redirects the lookups that honour the hosts file and
+therefore gives a partial result — it is kept for diagnosis, not for installs.
 
 ## Repository layout
 
