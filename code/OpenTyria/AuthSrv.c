@@ -907,6 +907,29 @@ int AuthSrvCtrl_HandlerStartPlayerTransfer(AuthSrv *srv, CtrlConnection *conn, C
         return ERR_OK;
     }
 
+    // Only the server the player is actually on may move them. A burst observed on
+    // 2026-10-25 had one /tp produce four handler calls alternating between two running
+    // servers, each minting a fresh identity -- the client ended up on a token nobody
+    // held and froze on the loading screen. A stale request from any other server is
+    // refused here, which also makes the alternation impossible.
+    if (connected->current_server_id != 0 && conn->server_id != 0 &&
+        conn->server_id != connected->current_server_id) {
+        log_warn("Ignoring a transfer request from server %u: the account is on server %u "
+                 "(stale request)", conn->server_id, connected->current_server_id);
+        return ERR_OK;
+    }
+
+    // While a transfer is in flight to one map, a request for a different map is refused
+    // rather than allowed to overwrite the identity the client is about to reconnect with.
+    if (connected->transferring && connected->current_server_id != 0) {
+        GameSrvMetadata *in_flight = AuthSrvCtrl_GetGameSrvMetadata(srv, connected->current_server_id);
+        if (in_flight != NULL && in_flight->district.map_id != msg->district.map_id) {
+            log_warn("Ignoring a transfer to map %d while a transfer to map %d is still in "
+                     "flight for this account", (int) msg->district.map_id,
+                     (int) in_flight->district.map_id);
+            return ERR_OK;
+        }
+    }
     // A transfer request can arrive twice for one move (observed 2026-10-25: once with
     // the target server still starting, once after it was up). Minting a fresh player
     // token each time is what broke it -- the client was handed the first token, the
