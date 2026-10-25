@@ -19,8 +19,10 @@ GmMapConfig s_KamadanJewelOfIstanOutpost = {
 // exactly, which is the check that this id is the right one.
 //
 // The spawn point is where the live client stood at the time (9541.873, 4796.456),
-// read from `Player.GetXY()`. The plane is *unverified* -- the probe did not read it,
-// so 0 is assumed; the 0x3D position stream corrects it on the first report.
+// read from `Player.GetXY()`. The plane is 0, **verified** 2026-10-25 by reading it
+// back from the standing character (`Agent.GetZPlane`, agent id 1) with
+// `tools/probe-pathing.py`; the tester confirmed the character lands in exactly the
+// right place.
 GmMapConfig s_AscalonCityPreSearing = {
     .map_id = MapId_AscalonCityPreSearing,
     .map_file_id = 0x1B97D,

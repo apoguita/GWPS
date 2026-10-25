@@ -1,4 +1,4 @@
-﻿"""Fingerprint the map the client is standing in, and find its Gw.dat blob.
+"""Fingerprint the map the client is standing in, and find its Gw.dat blob.
 
 Why
 ---
@@ -47,6 +47,34 @@ def hx(value: int) -> str:
     return f"0x{value:08X}"
 
 
+def find_clients(win32, pid: int | None) -> list[dict]:
+    """Find the client, including the *patched* one.
+
+    ``Win32.find_guild_wars()`` matches the executable name ``Gw.exe``. GWPS tests run
+    the patched client, ``Gw.custom.exe`` (see ``scripts/phase0-prepare.ps1``), which
+    that matcher never returns — so this falls back to any process whose name starts
+    with ``gw``, excluding our own server. ``--pid`` skips discovery entirely.
+    """
+    if pid is not None:
+        return [{"pid": int(pid), "name": None, "path": None}]
+
+    clients = list(win32.find_guild_wars())
+    if clients:
+        return clients
+
+    for entry in win32.list_processes():
+        name = str(entry.get("name") or "")
+        lowered = name.lower()
+        if lowered.startswith("gw") and not lowered.startswith("gwps"):
+            path = None
+            try:
+                path, _ = win32._get_image_path(int(entry["pid"]))
+            except Exception:  # noqa: BLE001 - the path is a nicety
+                pass
+            clients.append({"pid": int(entry["pid"]), "name": name, "path": path})
+    return clients
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Fingerprint the loaded map's navmesh.")
     parser.add_argument("--py4gw-root", default=os.environ.get("PY4GW_STEALTH", DEFAULT_PY4GW_ROOT))
@@ -76,13 +104,14 @@ def main(argv: list[str]) -> int:
               file=sys.stderr)
         return 2
 
-    clients = [c for c in win32.find_guild_wars()
-               if args.pid is None or int(c["pid"]) == args.pid]
+    clients = find_clients(win32, args.pid)
     if not clients:
-        print("no Gw.exe is running", file=sys.stderr)
+        print("no Guild Wars client is running (looked for Gw*.exe; pass --pid if it is "
+              "named something else)", file=sys.stderr)
         return 3
 
-    report: dict = {"client": {"pid": int(clients[0]["pid"]), "path": clients[0].get("path")}}
+    report: dict = {"client": {"pid": int(clients[0]["pid"]), "name": clients[0].get("name"),
+                               "path": clients[0].get("path")}}
     client = py4gw.connect(clients[0])
     try:
         map_id = int(Map.GetMapID() or 0)
@@ -94,6 +123,15 @@ def main(argv: list[str]) -> int:
         try:
             position = Player.GetXY()
             report["position"] = {"x": round(float(position[0]), 3), "y": round(float(position[1]), 3)}
+            # The plane matters: a GmMapConfig spawn point is (x, y, plane), and the
+            # wrong plane puts the character on another layer of the map.
+            try:
+                from py4gw.agent import Agent
+                agent_id = int(Player.GetAgentID())
+                report["position"]["agent_id"] = agent_id
+                report["position"]["plane"] = int(Agent.GetZPlane(agent_id))
+            except Exception as exc:  # noqa: BLE001 - a bonus, not the point
+                report["position"]["plane_error"] = repr(exc)
         except Exception as exc:  # noqa: BLE001 - position is a bonus, not the point
             report["position_error"] = repr(exc)
 

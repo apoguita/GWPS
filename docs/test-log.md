@@ -567,3 +567,36 @@ coincidence inside an index table of small integers, and Kamadan's `name_id` (24
 does not appear at all. There are no map-name strings either (no `Ascalon`, in ASCII or
 UTF-16). So `map_id -> file_id` is not derivable offline from the archive; it has to be
 observed once per map.
+
+---
+
+## Probe — the fast path, against the live patched client — PASS — 2026-10-25 — `4e4198a`
+
+Ran `tools/probe-pathing.py` against the client that was logged into the GWPS server,
+and it closed three open items at once.
+
+**Found a bug first.** The probe reported "no Gw.exe is running" while a client was
+plainly connected. `Win32.find_guild_wars()` matches the executable name `Gw.exe`, and
+GWPS tests run the **patched** client, `Gw.custom.exe` — invisible to that matcher.
+Fixed: discovery now falls back to any process whose name starts with `gw` (excluding
+`gwps_server`), and `--pid` skips discovery entirely. This is the same class of mistake
+as the compressed-size filter: a tool that silently could not see its own subject.
+
+**The fast path works.** With a fingerprint sheet that has no size floor, the probe
+matched the loaded map to exactly two blobs — `0x0001B97D` and `0x0005E9E4`, the pair
+already in `GmMapsConfig.c` — in one run, with no float search needed:
+
+```
+map 148 (Ascalon City (pre-Searing))
+  player position  9536.206, 4709.885   (agent 1, plane 0)
+  fingerprint      planes=58 trapezoids=6120 bounds=(-18432,-24576)..(21504,24576)
+  2 matching blob(s): 0x0001B97D, 0x0005E9E4
+```
+
+**The spawn plane is verified.** It was the one value in the config marked as a guess.
+Read back from the standing character with `Agent.GetZPlane`: **plane 0**, which is what
+the config assumes. Combined with the tester's confirmation that the character lands in
+exactly the right place, `s_AscalonCityPreSearing` is now fully verified rather than
+partly assumed.
+
+Per-map cost is now: one client visit, one command, and the blob id falls out.

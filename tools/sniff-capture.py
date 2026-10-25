@@ -14,7 +14,7 @@ not depend on Py4GW at runtime.
 Elevation is required, and not by choice
 ----------------------------------------
 `py4gw.connect()` asserts an elevated token and refuses without one, because
-connecting is a write — shared block, dispatcher, handler entries. A process cannot
+connecting is a write â€” shared block, dispatcher, handler entries. A process cannot
 raise its own token, so:
 
     Start an elevated PowerShell (approve the UAC prompt), then run this script.
@@ -28,7 +28,7 @@ The log is a ring, so this drains it
 The sniffer keeps a capped log (`K_MAX_LOGS = 10000` in
 `py4gw/native_src/packets/py_packet_sniffer.py`) and drops the oldest entry first.
 A long session would therefore silently truncate itself. This script reads the log,
-**clears it**, and repeats — so the file is complete regardless of how long it runs,
+**clears it**, and repeats â€” so the file is complete regardless of how long it runs,
 and the client-side vector stays small.
 
 Records are sanitised by default
@@ -234,6 +234,34 @@ def parse_headers(text: str | None) -> set[int] | None:
     return headers
 
 
+def find_clients(win32, pid: int | None) -> list[dict]:
+    """Find the client, including the *patched* one.
+
+    ``Win32.find_guild_wars()`` matches the executable name ``Gw.exe``, and GWPS tests
+    run ``Gw.custom.exe`` (``scripts/phase0-prepare.ps1``), which that matcher never
+    returns. Fall back to any process whose name starts with ``gw``, excluding our own
+    server; ``--pid`` skips discovery entirely.
+    """
+    if pid is not None:
+        return [{"pid": int(pid), "name": None, "path": None}]
+
+    clients = list(win32.find_guild_wars())
+    if clients:
+        return clients
+
+    for entry in win32.list_processes():
+        name = str(entry.get("name") or "")
+        lowered = name.lower()
+        if lowered.startswith("gw") and not lowered.startswith("gwps"):
+            path = None
+            try:
+                path, _ = win32._get_image_path(int(entry["pid"]))
+            except Exception:  # noqa: BLE001 - the path is a nicety
+                pass
+            clients.append({"pid": int(entry["pid"]), "name": name, "path": path})
+    return clients
+
+
 def run_capture(args) -> int:
     root = Path(args.py4gw_root)
     if not (root / "py4gw").is_dir():
@@ -253,12 +281,10 @@ def run_capture(args) -> int:
               file=sys.stderr)
         return 2
 
-    clients = win32.find_guild_wars()
-    if args.pid:
-        clients = [c for c in clients if int(c["pid"]) == args.pid]
+    clients = find_clients(win32, args.pid)
     if not clients:
-        print("no Gw.exe is running" if not args.pid else f"no Gw.exe with pid {args.pid}",
-              file=sys.stderr)
+        print("no Guild Wars client is running (looked for Gw*.exe; pass --pid if it is "
+              "named something else)", file=sys.stderr)
         return 3
     target = clients[0]
 
@@ -448,3 +474,4 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
+
