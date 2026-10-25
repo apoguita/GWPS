@@ -114,7 +114,24 @@ def main(args):
     #   - File1 exists to stream Gw.dat content. Truly detaching means serving that ourselves:
     #     GameSrv_SendManifest exists but is never called with real data, and the manifest we
     #     send says "done" with nothing behind it.
-    HOSTS = (
+    # Selecting which of these to repoint. Default: none (a normal build must not risk login).
+    #
+    #   --detach                 repoint all seven. Known to break login, kept for reference.
+    #   --detach-only <prefix>   repoint only the matching host(s). Repeatable.
+    #   --detach-keep <prefix>   repoint all except the matching host(s). Repeatable.
+    #
+    # Prefixes: Auth1, File1, Diag, icmp, bug, ArenaNetworks.com, account.arena.net
+    #
+    # Why this is opt-in and prefix-selectable: on 2026-10-25 repointing all seven broke login
+    # ("Guild Wars is unable to connect to the ArenaNet network"), and restoring File1 alone
+    # did not fix it -- so at least one more of these is required at startup and the safe subset
+    # has to be found per host, one launch at a time.
+    #
+    # Established by that experiment: a working client holds a socket to 54.196.189.234, which
+    # is in File1.ArenaNetworks.com's A record set -- the content/file server, not auth.
+    # `-authsrv 127.0.0.1` does redirect the auth handshake. File1 streams Gw.dat content;
+    # detaching from it for real means serving those files ourselves.
+    ALL_HOSTS = (
         b'Auth1.ArenaNetworks.com',
         b'File1.ArenaNetworks.com',
         b'Diag.ArenaNetworks.com',
@@ -122,7 +139,25 @@ def main(args):
         b'icmp.arenanetworks.com',
         b'ArenaNetworks.com',
         b'account.arena.net',
-    ) if getattr(args, 'detach', False) else ()
+    )
+
+    def matches(host, selects):
+        name = host.decode().lower()
+        return any(name.startswith(s.lower()) for s in selects)
+
+    only = getattr(args, 'detach_only', None) or []
+    keep = getattr(args, 'detach_keep', None) or []
+    if only:
+        HOSTS = tuple(h for h in ALL_HOSTS if matches(h, only))
+        print(f'[+] --detach-only selected {len(HOSTS)} host(s)')
+    elif keep:
+        HOSTS = tuple(h for h in ALL_HOSTS if not matches(h, keep))
+        print(f'[+] --detach-keep left out {len(ALL_HOSTS) - len(HOSTS)} host(s), repointing {len(HOSTS)}')
+    elif getattr(args, 'detach', False):
+        HOSTS = ALL_HOSTS
+        print('[+] --detach: repointing all of them')
+    else:
+        HOSTS = ()
     REPLACEMENT = b'127.0.0.1'
 
     def is_host_char(b):
@@ -171,9 +206,12 @@ if __name__ == '__main__':
     parser.add_argument('keys_file')
     parser.add_argument('--output', metavar='output', type=str, help='The output file', required=False)
     parser.add_argument('--detach', action='store_true',
-                        help='Also repoint the baked-in ArenaNet hostnames at 127.0.0.1. '
-                             'Known to break login: this client needs the real endpoints '
-                             'at startup. Kept for the experiment, not for normal builds.')
+                        help='Repoint every baked-in ArenaNet hostname at 127.0.0.1. Known to '
+                             'break login: this client needs real endpoints at startup.')
+    parser.add_argument('--detach-only', action='append', metavar='PREFIX',
+                        help='Repoint only the hostname(s) starting with PREFIX. Repeatable.')
+    parser.add_argument('--detach-keep', action='append', metavar='PREFIX',
+                        help='Repoint all hostnames except those starting with PREFIX. Repeatable.')
 
     args = parser.parse_args()
     main(args)
