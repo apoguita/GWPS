@@ -33,7 +33,16 @@ $endMarker = '# --- end GWPS ---'
 
 $lines = @(
     '127.0.0.1 Auth1.ArenaNetworks.com',
+    # The client uses more than one file server: a DNS capture (tools/capture-dns.ps1) caught
+    # it looking up File2.ArenaNetworks.com while File1 was already redirected, and File2 was
+    # the socket still reaching a real server. Covering a small range beats chasing them one
+    # per login -- a name that does not exist simply never gets queried.
     '127.0.0.1 File1.ArenaNetworks.com',
+    '127.0.0.1 File2.ArenaNetworks.com',
+    '127.0.0.1 File3.ArenaNetworks.com',
+    '127.0.0.1 File4.ArenaNetworks.com',
+    '127.0.0.1 File5.ArenaNetworks.com',
+    '127.0.0.1 File6.ArenaNetworks.com',
     '127.0.0.1 Diag.ArenaNetworks.com',
     '127.0.0.1 icmp.arenanetworks.com',
     '127.0.0.1 account.arena.net'
@@ -64,9 +73,22 @@ if ($Disable) {
 }
 
 if ($Enable) {
-    if ($enabled) { 'already enabled'; return }
     $backup = "$HostsPath.gwps-backup"
     if (-not (Test-Path $backup)) { Copy-Item $HostsPath $backup -Force }
+
+    # Refresh rather than skip: an existing block may be an older, shorter set, and the client
+    # keeps finding new names (File2 was only discovered by capturing its DNS queries).
+    if ($enabled) {
+        $kept = New-Object System.Collections.Generic.List[string]
+        $skipping = $false
+        foreach ($line in ($content -split "`r?`n")) {
+            if ($line.Trim() -eq $beginMarker) { $skipping = $true; continue }
+            if ($line.Trim() -eq $endMarker) { $skipping = $false; continue }
+            if (-not $skipping) { $kept.Add($line) }
+        }
+        Set-Content -Path $HostsPath -Value ($kept -join "`r`n") -Encoding ascii
+    }
+
     Add-Content -Path $HostsPath -Value (@('', $beginMarker) + $lines + @($endMarker))
     'enabled'
     return

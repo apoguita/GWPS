@@ -73,10 +73,74 @@ def parse_tcp(linktype, frame):
     return f'{src}:{sport}', f'{dst}:{dport}', flags, payload
 
 
+def parse_dns_name(payload):
+    """Return the QNAME of a DNS query, or None if this is not a query."""
+    if len(payload) < 13:
+        return None
+    flags = struct.unpack_from('>H', payload, 2)[0]
+    if flags & 0x8000:  # a response, not a query
+        return None
+    if struct.unpack_from('>H', payload, 4)[0] == 0:
+        return None
+    labels = []
+    off = 12
+    while off < len(payload):
+        length = payload[off]
+        if length == 0 or length > 63 or off + 1 + length > len(payload):
+            break
+        labels.append(payload[off + 1:off + 1 + length].decode('ascii', 'ignore'))
+        off += 1 + length
+    return '.'.join(labels) if labels else None
+
+
+def parse_udp(linktype, frame):
+    """Return (src, dst, payload) for IPv4/UDP, or None."""
+    off = 0
+    if linktype == 1:
+        if len(frame) < 14:
+            return None
+        if struct.unpack_from('>H', frame, 12)[0] != 0x0800:
+            return None
+        off = 14
+    elif linktype != 101:
+        return None
+
+    if len(frame) < off + 20 or frame[off] >> 4 != 4:
+        return None
+    ihl = (frame[off] & 0x0F) * 4
+    if frame[off + 9] != 17:  # UDP
+        return None
+    total_len = struct.unpack_from('>H', frame, off + 2)[0]
+    src = '.'.join(str(b) for b in frame[off + 12:off + 16])
+    dst = '.'.join(str(b) for b in frame[off + 16:off + 20])
+
+    udp_off = off + ihl
+    if len(frame) < udp_off + 8:
+        return None
+    sport, dport = struct.unpack_from('>HH', frame, udp_off)
+    return f'{src}:{sport}', f'{dst}:{dport}', frame[udp_off + 8: off + total_len]
+
+
 def main():
     path = sys.argv[1]
     packets = parse(path)
     print(f'{len(packets)} packets')
+
+    queries = []
+    for linktype, frame in packets:
+        r = parse_udp(linktype, frame)
+        if not r:
+            continue
+        src, dst, payload = r
+        if dst.endswith(':53'):
+            name = parse_dns_name(payload)
+            if name and name not in queries:
+                queries.append(name)
+
+    if queries:
+        print(f'\n=== DNS names looked up ({len(queries)}) ===')
+        for name in queries:
+            print('  ' + name)
 
     convos = {}
     for linktype, frame in packets:
