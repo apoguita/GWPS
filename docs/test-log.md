@@ -146,3 +146,29 @@ Findings:
 
 Still open: assigning blob ids to map ids for Pre-Searing. See
 `06-client-tooling.md` -> "Still open".
+
+---
+
+## Pre-Searing load probe — NEGATIVE RESULT (useful) — 2026-10-24 — `d2f0b35`
+
+Client logged in at **map 148, Ascalon City (pre-Searing)**, region 7, type 10.
+
+Command (elevated, read-only):
+```powershell
+python tools/probe-current-map.py
+```
+
+Observed:
+- `Map.GetMapID()` = 148; `InstanceInfo.current_map_info` gives region 7, type 10,
+  name_id 10478 — the map is genuinely loaded and correct.
+- **`AreaInfo[148].file_id` is still 0**, both through the InstanceInfo pointer and
+  through a direct array walk.
+- Of the 159 populated entries, **zero** appear in the 426-blob map list.
+
+Finding:
+- F5 — `AreaInfo.file_id` is not the map geometry id, and `file_id1`/`file_id2` do
+  not derive it. Loading the map does not populate it. Class: by-design (different
+  identifier). Action: correct `06-client-tooling.md` (done) and do not use it to
+  fill `GmMapConfig`.
+- F6 — The AreaInfo array is shorter than 900 entries: ids 898/899 read garbage
+  (`region = 1130133319`). Action: bound scans below ~898.

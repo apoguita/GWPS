@@ -287,3 +287,32 @@ What that buys us, concretely:
   to the repo, or keep them out of git entirely.
 - **Record the client build.** Offsets, patterns and packet layouts are
   build-specific. Any golden capture must state the `Gw.exe` version it came from.
+
+### CORRECTION (2026-10-24, later the same day): `AreaInfo.file_id` is NOT the map id
+
+The section above said `AreaInfo.file_id` is the same quantity as
+`GmMapConfig.map_file_id`. **That is wrong, and it is worth leaving the correction
+here so nobody repeats it.**
+
+With a character standing **inside** map 148 (Ascalon City, pre-Searing) — region
+7, type 10, fully loaded — the field still reads **0**:
+
+```
+current map id = 148  (Ascalon City (pre-Searing))
+current AreaInfo (via InstanceInfo pointer):
+  region 7   type 10   name_id 10478
+  file_id 0   file_id1 0xFFFF   file_id2 0xFF
+array walk AreaInfo[148].file_id = 0x00000000
+```
+
+The 159 entries that *are* populated are legacy PvP/guild-hall infrastructure, and
+**none of them appears in the 426-blob map list** from `data/gwdat-maps.csv`. So
+`file_id` is a different concept, not the map geometry key. It also means the
+`file_id1()`/`file_id2()` decomposition does not lead to map geometry ids.
+
+Also note: reading past the end of the array yields garbage (`map_id` 898/899 read
+`region = 1130133319`), so the array is shorter than 900 entries — bound any scan
+below ~898.
+
+**Consequence:** `GmMapConfig.map_file_id` must come from observing which blob the
+client actually opens, not from `AreaInfo`.
